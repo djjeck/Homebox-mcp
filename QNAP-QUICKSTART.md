@@ -6,6 +6,8 @@ This is a simplified guide specifically for QNAP Container Station users who wan
 
 You have Homebox running in a Docker container on your QNAP. This guide will help you add the MCP server as another container that can talk to Homebox and be accessed by Claude Desktop.
 
+**Good news:** This guide uses a pre-built Docker image, so you don't need to download any files or build anything! Just copy/paste the configuration into Container Station and you're done.
+
 ## What You Need
 
 - QNAP NAS with Container Station installed
@@ -15,34 +17,7 @@ You have Homebox running in a Docker container on your QNAP. This guide will hel
 
 ## Installation Steps
 
-### Step 1: Get the Files on Your QNAP
-
-**Option A: Using Git (Recommended)**
-
-1. SSH into your QNAP:
-   ```bash
-   ssh admin@your-qnap-ip
-   ```
-
-2. Navigate to the Container folder:
-   ```bash
-   cd /share/Container
-   ```
-
-3. Clone this repository:
-   ```bash
-   git clone <repository-url> homebox-mcp
-   cd homebox-mcp
-   ```
-
-**Option B: Manual Upload**
-
-1. Download all files from this repository as a ZIP
-2. Extract the ZIP on your computer
-3. Use QNAP File Station to create a folder: `/share/Container/homebox-mcp`
-4. Upload all files to that folder
-
-### Step 2: Find Your Homebox Network Name
+### Step 1: Find Your Homebox Network Name
 
 You need to know what Docker network your Homebox container uses:
 
@@ -60,60 +35,54 @@ docker inspect homebox --format='{{.HostConfig.NetworkMode}}'
 
 Write down this network name - you'll need it!
 
-### Step 3: Configure the MCP Server
+### Step 2: Create Your Docker Compose Configuration
 
-**Edit the docker-compose file:**
+You'll create a simple Docker Compose configuration that pulls the pre-built image.
 
-1. Open `/share/Container/homebox-mcp/docker-compose.qnap.yml` in a text editor
+1. **Copy the template below:**
 
-2. Update these lines:
-   ```yaml
-   environment:
-     - HOMEBOX_URL=http://homebox:7745
-     - HOMEBOX_EMAIL=your-email@example.com      # <-- Change this
-     - HOMEBOX_PASSWORD=your-password             # <-- Change this
+```yaml
+version: '3.8'
 
-   networks:
-     - qnet-static-eth0-xxxxxx                    # <-- Change this to your network name
-   ```
+services:
+  homebox-mcp:
+    image: ghcr.io/jeeves5454/homebox-mcp:latest
+    container_name: homebox-mcp-server
+    restart: unless-stopped
+    environment:
+      - HOMEBOX_URL=http://homebox:7745
+      - HOMEBOX_EMAIL=your-email@example.com
+      - HOMEBOX_PASSWORD=your-password
+    networks:
+      - qnet-static-eth0-xxxxxx
 
-3. At the bottom, also update:
-   ```yaml
-   networks:
-     qnet-static-eth0-xxxxxx:                     # <-- Change this too
-       external: true
-   ```
-
-4. Save the file
-
-**Important Notes:**
-- Replace `your-email@example.com` with your Homebox email
-- Replace `your-password` with your Homebox password
-- Replace `qnet-static-eth0-xxxxxx` with the network name from Step 2
-- The network name appears in TWO places - update both!
-
-### Step 4: Deploy the Container
-
-**Method A: Container Station UI**
-
-1. Open Container Station
-2. Click "Create" → "Create Application"
-3. Name it: `homebox-mcp`
-4. Copy and paste the contents of your edited `docker-compose.qnap.yml`
-5. Click "Validate and Apply"
-6. Click "Create"
-
-The system will build the Docker image (this takes a few minutes the first time) and start the container.
-
-**Method B: SSH Command Line**
-
-```bash
-ssh admin@your-qnap-ip
-cd /share/Container/homebox-mcp
-docker-compose -f docker-compose.qnap.yml up -d --build
+networks:
+  qnet-static-eth0-xxxxxx:
+    external: true
 ```
 
-### Step 5: Verify It's Working
+2. **Edit these values:**
+   - Replace `your-email@example.com` with your Homebox email
+   - Replace `your-password` with your Homebox password
+   - Replace `qnet-static-eth0-xxxxxx` with the network name from Step 1 (appears in TWO places)
+
+### Step 3: Deploy in Container Station
+
+1. **Open Container Station** on your QNAP
+
+2. **Click "Create" → "Create Application"**
+
+3. **Name it:** `homebox-mcp`
+
+4. **Paste your edited configuration** from Step 2
+
+5. **Click "Validate and Apply"**
+
+6. **Click "Create"**
+
+Container Station will pull the pre-built image from GitHub and start the container. This is much faster than building!
+
+### Step 4: Verify It's Working
 
 **Check the logs:**
 
@@ -138,7 +107,7 @@ docker logs homebox-mcp-server
 - "Cannot connect" - Check the network configuration
 - See [DOCKER.md](DOCKER.md) for detailed troubleshooting
 
-### Step 6: Connect Claude Desktop
+### Step 5: Connect Claude Desktop
 
 Now you need to tell Claude Desktop how to access the MCP server running on your QNAP.
 
@@ -193,7 +162,7 @@ Some QNAP models allow remote Docker access. If configured:
 }
 ```
 
-### Step 7: Set Up SSH Keys (For Option A)
+### Step 6: Set Up SSH Keys (For Option A)
 
 Claude Desktop requires SSH key authentication (not password).
 
@@ -217,7 +186,7 @@ Claude Desktop requires SSH key authentication (not password).
    ```
    Should print "success" without asking for password
 
-### Step 8: Test with Claude
+### Step 7: Test with Claude
 
 1. Restart Claude Desktop
 2. Open a new conversation
@@ -270,14 +239,19 @@ If it works, Claude will show your locations! 🎉
 
 ## Updating the MCP Server
 
-When a new version is released:
+When a new version is released, it's very easy to update since you're using the pre-built image:
 
+**In Container Station UI:**
+1. Stop the `homebox-mcp-server` container
+2. Click on the container → Click "Image"
+3. Click "Pull" to get the latest version
+4. Start the container again
+
+**Or via SSH:**
 ```bash
 ssh admin@your-qnap-ip
-cd /share/Container/homebox-mcp
-git pull
-docker-compose -f docker-compose.qnap.yml down
-docker-compose -f docker-compose.qnap.yml up -d --build
+docker pull ghcr.io/jeeves5454/homebox-mcp:latest
+docker restart homebox-mcp-server
 ```
 
 ## Security Tips
