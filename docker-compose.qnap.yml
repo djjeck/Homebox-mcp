@@ -1,0 +1,54 @@
+# Docker Compose configuration for QNAP Container Station
+#
+# IMPORTANT: Edit the environment variables below with your Homebox credentials
+# and update the network name to match your Homebox container's network
+
+version: '3.8'
+
+services:
+  homebox-mcp:
+    build: .
+    container_name: homebox-mcp-server
+    restart: unless-stopped
+
+    # CONFIGURE THESE ENVIRONMENT VARIABLES
+    environment:
+      # URL to your Homebox container
+      # Use the container name (usually 'homebox') or container IP
+      - HOMEBOX_URL=http://homebox:7745
+
+      # Your Homebox login credentials
+      - HOMEBOX_EMAIL=your-email@example.com
+      - HOMEBOX_PASSWORD=your-password
+
+    # NETWORK CONFIGURATION
+    # This MUST match your Homebox container's network
+    # To find it:
+    # 1. Go to Container Station
+    # 2. Click on your Homebox container
+    # 3. Check the "Network" section
+    # 4. Replace the network name below
+    networks:
+      - qnet-static-eth0-xxxxxx
+
+# Network configuration
+# Option 1: Use external network (Homebox already has a network)
+networks:
+  qnet-static-eth0-xxxxxx:
+    external: true
+
+# Option 2: If you want to create a new network and add both containers to it
+# Uncomment below and comment out the external network above
+# networks:
+#   homebox-net:
+#     driver: bridge
+
+# ALTERNATIVE: Using a config file instead of environment variables
+# If you prefer to use a config.json file:
+#
+# 1. Uncomment the volumes section below
+# 2. Create config.json in the same directory as this file
+# 3. Comment out the environment section above
+#
+# volumes:
+#   - ./config.json:/config/config.json:ro

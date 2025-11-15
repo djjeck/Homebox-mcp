@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  homebox-mcp:
+    build: .
+    container_name: homebox-mcp-server
+    restart: unless-stopped
+
+    # Option 1: Use environment variables (recommended for Docker)
+    environment:
+      - HOMEBOX_URL=http://homebox:7745
+      - HOMEBOX_EMAIL=your-email@example.com
+      - HOMEBOX_PASSWORD=your-password
+
+    # Option 2: Use a config file (uncomment if preferred)
+    # volumes:
+    #   - ./config.json:/config/config.json:ro
+
+    # Connect to the same network as Homebox
+    # If your Homebox container is on a different network, adjust accordingly
+    networks:
+      - homebox-network
+
+    # Port mapping is not needed for MCP server (uses stdio)
+    # but you can expose for debugging if needed
+    # ports:
+    #   - "3000:3000"
+
+# If Homebox is in a separate docker-compose, you can reference its network
+networks:
+  homebox-network:
+    external: true
+    # If the network doesn't exist yet, use this instead:
+    # driver: bridge

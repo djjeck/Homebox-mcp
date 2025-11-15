@@ -13,7 +13,16 @@ This MCP server acts as a bridge between AI assistants (like Claude) and your Ho
 - Find all items in a specific location
 - Find all items with a specific label
 
-## Prerequisites
+## Deployment Options
+
+Choose the deployment method that works best for you:
+
+- **[Docker / QNAP Container Station](DOCKER.md)** - Run in a container (recommended for QNAP users)
+- **[Local Installation](#step-by-step-setup-instructions)** - Run directly on your computer (see below)
+
+## Prerequisites (Local Installation)
+
+**Note:** If you're using Docker/QNAP, see [DOCKER.md](DOCKER.md) instead.
 
 Before you begin, you'll need:
 
@@ -21,7 +30,7 @@ Before you begin, you'll need:
 2. **A running Homebox instance** - You should have Homebox already installed and accessible
 3. **Homebox login credentials** - Your email and password for Homebox
 
-## Step-by-Step Setup Instructions
+## Step-by-Step Setup Instructions (Local Installation)
 
 ### Step 1: Install Node.js
 

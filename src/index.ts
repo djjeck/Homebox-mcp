@@ -8,7 +8,7 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import axios, { AxiosInstance } from "axios";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -146,17 +146,52 @@ class HomeboxClient {
   }
 }
 
-// Load configuration
+// Load configuration from multiple sources
+// Priority: 1. /config/config.json (Docker volume), 2. Environment variables, 3. ./config.json
 function loadConfig(): HomeboxConfig {
-  const configPath = join(__dirname, "..", "config.json");
-  try {
-    const configData = readFileSync(configPath, "utf-8");
-    return JSON.parse(configData);
-  } catch (error: any) {
-    console.error("Error loading config.json:", error.message);
-    console.error("Please create a config.json file based on config.json.example");
-    process.exit(1);
+  // Try Docker volume mount location first
+  const dockerConfigPath = "/config/config.json";
+  if (existsSync(dockerConfigPath)) {
+    try {
+      const configData = readFileSync(dockerConfigPath, "utf-8");
+      const config = JSON.parse(configData);
+      console.error("Loaded configuration from /config/config.json");
+      return config;
+    } catch (error: any) {
+      console.error("Error loading /config/config.json:", error.message);
+    }
   }
+
+  // Try environment variables
+  if (process.env.HOMEBOX_URL && process.env.HOMEBOX_EMAIL && process.env.HOMEBOX_PASSWORD) {
+    console.error("Loaded configuration from environment variables");
+    return {
+      homeboxUrl: process.env.HOMEBOX_URL,
+      email: process.env.HOMEBOX_EMAIL,
+      password: process.env.HOMEBOX_PASSWORD,
+    };
+  }
+
+  // Try local config.json
+  const localConfigPath = join(__dirname, "..", "config.json");
+  if (existsSync(localConfigPath)) {
+    try {
+      const configData = readFileSync(localConfigPath, "utf-8");
+      const config = JSON.parse(configData);
+      console.error("Loaded configuration from config.json");
+      return config;
+    } catch (error: any) {
+      console.error("Error loading config.json:", error.message);
+    }
+  }
+
+  // No configuration found
+  console.error("Error: No configuration found!");
+  console.error("Please provide configuration via one of:");
+  console.error("  1. Environment variables: HOMEBOX_URL, HOMEBOX_EMAIL, HOMEBOX_PASSWORD");
+  console.error("  2. /config/config.json (for Docker)");
+  console.error("  3. config.json (copy from config.json.example)");
+  process.exit(1);
 }
 
 // Define available tools
