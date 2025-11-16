@@ -337,6 +337,10 @@ async function main() {
     const { name, arguments: args } = request.params;
 
     try {
+      if (!args) {
+        throw new Error("Missing arguments");
+      }
+
       switch (name) {
         case "search_items": {
           const result = await homeboxClient.searchItems(args.query as string);
