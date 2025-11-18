@@ -3,16 +3,17 @@ title: Homebox Item Search
 author: open-webui
 author_url: https://github.com/open-webui
 funding_url: https://github.com/open-webui
-version: 1.0.0
+version: 1.0.1
 license: MIT
 description: Search for items in your Homebox home inventory
-required_open_webui_version: 0.3.0
+required_open_webui_version: 0.5.0
 requirements: requests
 """
 
 import requests
 from typing import Optional
 from pydantic import BaseModel, Field
+from fastapi import Request
 
 
 class Tools:
@@ -62,10 +63,12 @@ class Tools:
             "Content-Type": "application/json"
         }
 
-    def search_homebox_items(
+    async def search_homebox_items(
         self,
         query: str,
-        __user__: dict = {}
+        __request__: Request,
+        __user__: dict = {},
+        __event_emitter__=None
     ) -> str:
         """
         Search for items in Homebox inventory by name or description.
@@ -103,10 +106,12 @@ class Tools:
         except Exception as e:
             return f"Error searching items: {str(e)}"
 
-    def get_items_by_location(
+    async def get_items_by_location(
         self,
         location_name: str,
-        __user__: dict = {}
+        __request__: Request,
+        __user__: dict = {},
+        __event_emitter__=None
     ) -> str:
         """
         Get all items stored in a specific location.
@@ -161,9 +166,11 @@ class Tools:
         except Exception as e:
             return f"Error getting items by location: {str(e)}"
 
-    def list_homebox_locations(
+    async def list_homebox_locations(
         self,
-        __user__: dict = {}
+        __request__: Request,
+        __user__: dict = {},
+        __event_emitter__=None
     ) -> str:
         """
         List all storage locations in Homebox.
@@ -196,10 +203,12 @@ class Tools:
         except Exception as e:
             return f"Error listing locations: {str(e)}"
 
-    def get_items_by_label(
+    async def get_items_by_label(
         self,
         label_name: str,
-        __user__: dict = {}
+        __request__: Request,
+        __user__: dict = {},
+        __event_emitter__=None
     ) -> str:
         """
         Get all items that have a specific label/tag.
@@ -256,9 +265,11 @@ class Tools:
         except Exception as e:
             return f"Error getting items by label: {str(e)}"
 
-    def list_homebox_labels(
+    async def list_homebox_labels(
         self,
-        __user__: dict = {}
+        __request__: Request,
+        __user__: dict = {},
+        __event_emitter__=None
     ) -> str:
         """
         List all labels/tags in Homebox.
