@@ -15,10 +15,21 @@ This MCP server acts as a bridge between AI assistants (like Claude) and your Ho
 
 ## Deployment Options
 
-Choose the deployment method that works best for you:
+Choose the integration method that works best for your use case:
 
-- **[Docker / QNAP Container Station](DOCKER.md)** - Run in a container (recommended for QNAP users)
-- **[Local Installation](#step-by-step-setup-instructions)** - Run directly on your computer (see below)
+### For Open WebUI + Ollama Users
+- **[Open WebUI Functions](OPEN-WEBUI.md)** - Native integration for Open WebUI with function-calling models (recommended for Ollama)
+- **[Cocktail Examples](COCKTAIL-EXAMPLES.md)** - Specific examples for home bar/cocktail use cases
+
+### For Claude Desktop Users (MCP Protocol)
+- **[Docker / QNAP Container Station](DOCKER.md)** - Run MCP server in a container
+- **[Native QNAP Installation](QNAP-NATIVE.md)** - Run MCP server directly on QNAP (recommended for Claude Desktop)
+- **[Local Installation](#step-by-step-setup-instructions)** - Run MCP server on your computer (see below)
+
+**Which should I choose?**
+- Using **Ollama with Open WebUI**? → Use [Open WebUI Functions](OPEN-WEBUI.md)
+- Using **Claude Desktop**? → Use [Native QNAP Installation](QNAP-NATIVE.md) or [Docker](DOCKER.md)
+- Running **locally on Windows/Mac/Linux**? → Follow [Local Installation](#step-by-step-setup-instructions) below
 
 ## Prerequisites (Local Installation)
 
@@ -229,6 +240,7 @@ The MCP server provides these tools:
 
 ## How It Works
 
+### MCP Server Approach (Claude Desktop)
 This MCP server:
 1. Connects to your Homebox instance via its REST API
 2. Authenticates using your credentials
@@ -236,6 +248,16 @@ This MCP server:
 4. Returns data in a format that Claude can understand and present to you
 
 The server doesn't directly access the SQLite database. Instead, it uses Homebox's official API, which is safer and more reliable for real-time access.
+
+### Open WebUI Functions Approach (Ollama)
+The Open WebUI integration:
+1. Installs as a native function in Open WebUI
+2. Calls Homebox REST API directly from within Open WebUI
+3. Works with any function-calling capable Ollama model (Llama 3.1, Mistral, Qwen, etc.)
+4. No separate server process needed
+5. Perfect for Docker deployments on QNAP
+
+**See [OPEN-WEBUI.md](OPEN-WEBUI.md) for complete setup instructions.**
 
 ## Development
 
