@@ -15,7 +15,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-class Tools:
+class Function:
     class Valves(BaseModel):
         HOMEBOX_URL: str = Field(
             default="http://homebox:7745",
