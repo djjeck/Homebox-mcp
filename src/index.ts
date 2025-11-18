@@ -301,47 +301,60 @@ const TOOLS: Tool[] = [
 // Main server setup
 async function main() {
   console.error("Starting Homebox MCP Server...");
+  console.error("Node version:", process.version);
+  console.error("Platform:", process.platform);
 
-  const config = loadConfig();
-  const homeboxClient = new HomeboxClient(config);
-
-  // Test authentication on startup
   try {
-    await homeboxClient.authenticate();
-    console.error("Successfully authenticated with Homebox");
-  } catch (error: any) {
-    console.error("Failed to authenticate with Homebox:", error.message);
-    console.error("Please check your config.json settings");
-    process.exit(1);
-  }
+    console.error("Loading configuration...");
+    const config = loadConfig();
+    console.error("Configuration loaded successfully");
 
-  const server = new Server(
-    {
-      name: "homebox-mcp-server",
-      version: "1.0.0",
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
-    }
-  );
+    console.error("Creating Homebox client...");
+    const homeboxClient = new HomeboxClient(config);
 
-  // List available tools
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: TOOLS };
-  });
-
-  // Handle tool calls
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-
+    // Test authentication on startup
+    console.error("Attempting authentication with Homebox...");
     try {
-      if (!args) {
-        throw new Error("Missing arguments");
-      }
+      await homeboxClient.authenticate();
+      console.error("Successfully authenticated with Homebox");
+    } catch (error: any) {
+      console.error("Failed to authenticate with Homebox:", error.message);
+      console.error("Please check your config.json settings");
+      process.exit(1);
+    }
 
-      switch (name) {
+    console.error("Creating MCP Server instance...");
+    const server = new Server(
+      {
+        name: "homebox-mcp-server",
+        version: "1.0.0",
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      }
+    );
+    console.error("MCP Server instance created");
+
+    console.error("Setting up request handlers...");
+    // List available tools
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      console.error("ListTools request received");
+      return { tools: TOOLS };
+    });
+
+    // Handle tool calls
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      console.error("CallTool request received:", request.params.name);
+      const { name, arguments: args } = request.params;
+
+      try {
+        if (!args) {
+          throw new Error("Missing arguments");
+        }
+
+        switch (name) {
         case "search_items": {
           const result = await homeboxClient.searchItems(args.query as string);
           return {
@@ -452,15 +465,28 @@ async function main() {
         isError: true,
       };
     }
-  });
+    });
+    console.error("Request handlers configured");
 
-  // Start the server
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Homebox MCP Server running on stdio");
+    // Start the server
+    console.error("Creating stdio transport...");
+    const transport = new StdioServerTransport();
+    console.error("Stdio transport created");
+
+    console.error("Connecting server to transport...");
+    await server.connect(transport);
+    console.error("Homebox MCP Server running on stdio");
+    console.error("Server is ready to accept requests");
+
+  } catch (error: any) {
+    console.error("Error in main():", error);
+    console.error("Stack trace:", error.stack);
+    throw error;
+  }
 }
 
 main().catch((error) => {
-  console.error("Fatal error:", error);
+  console.error("Fatal error in main():", error);
+  console.error("Error details:", JSON.stringify(error, null, 2));
   process.exit(1);
 });
