@@ -11,10 +11,16 @@ import axios, { AxiosInstance } from "axios";
 import { readFileSync, existsSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { createRequire } from "module";
 
 // Get the directory of the current module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Load package.json for version info
+const require = createRequire(import.meta.url);
+const packageJson = require("../package.json");
+const VERSION = packageJson.version;
 
 // Configuration interface
 interface HomeboxConfig {
@@ -300,9 +306,12 @@ const TOOLS: Tool[] = [
 
 // Main server setup
 async function main() {
-  console.error("Starting Homebox MCP Server...");
+  console.error("=".repeat(60));
+  console.error("Homebox MCP Server v" + VERSION);
+  console.error("=".repeat(60));
   console.error("Node version:", process.version);
   console.error("Platform:", process.platform);
+  console.error("Build date:", new Date().toISOString());
 
   try {
     console.error("Loading configuration...");
@@ -327,7 +336,7 @@ async function main() {
     const server = new Server(
       {
         name: "homebox-mcp-server",
-        version: "1.0.0",
+        version: VERSION,
       },
       {
         capabilities: {
