@@ -222,79 +222,222 @@ async function runTestCase(tc: TestCase): Promise<boolean> {
 
 // ── Test cases ────────────────────────────────────────────────────────────────
 //
-// TODO: These tests currently rely on Homebox's seeded default data (locations,
-// tags) rather than creating their own test state. Once write APIs are
-// available via MCP, each test case should use them to set up and tear down its
-// own fixtures — making the suite independent of whatever a given Homebox
-// version happens to seed on first install.
+// Invariant: every test case must leave the database in the same state it found
+// it. The first test wipes all seeded data so subsequent tests start from a
+// known-empty state and can assert precisely.
 
 const TEST_CASES: TestCase[] = [
   {
-    name: "list_locations returns seeded default locations on fresh instance",
+    name: "wipe all seeded entities to establish a clean baseline",
     async run({ callTool }) {
-      const result = await callTool("list_locations", {});
-      if (!Array.isArray(result)) throw new Error(`Expected array, got ${typeof result}`);
-      if (result.length === 0) throw new Error("Expected seeded default locations, got empty array");
-      if (!result[0].id || !result[0].name) throw new Error("Expected location objects with id and name");
-    },
-  },
-  {
-    name: "list_tags returns an array on fresh instance",
-    async run({ callTool }) {
-      const result = await callTool("list_tags", {});
-      if (!Array.isArray(result)) throw new Error(`Expected array, got ${typeof result}`);
-    },
-  },
-  {
-    name: "search_items returns empty results on fresh instance",
-    async run({ callTool }) {
-      const result = await callTool("search_items", { query: "test" });
-      const items = result?.items ?? result;
-      if (!Array.isArray(items)) throw new Error(`Expected array, got ${typeof items}`);
-      if (items.length !== 0) throw new Error(`Expected 0 items, got ${items.length}`);
-    },
-  },
-  {
-    name: "get_location returns location details by id",
-    async run({ callTool }) {
-      const locations = await callTool("list_locations", {});
-      if (!Array.isArray(locations) || locations.length === 0) throw new Error("No locations to test with");
-      const first = locations[0];
-      const result = await callTool("get_location", { locationId: first.id });
-      if (result.id !== first.id) throw new Error(`Expected location id ${first.id}, got ${result.id}`);
-      if (!result.name) throw new Error("Expected location to have a name");
-    },
-  },
-  {
-    name: "get_items_by_location returns array for a valid location",
-    async run({ callTool }) {
-      const locations = await callTool("list_locations", {});
-      if (!Array.isArray(locations) || locations.length === 0) throw new Error("No locations to test with");
-      const result = await callTool("get_items_by_location", { locationId: locations[0].id });
-      if (!Array.isArray(result)) throw new Error(`Expected array, got ${typeof result}`);
-    },
-  },
-  {
-    name: "get_items_by_tag returns array for a valid tag",
-    async run({ callTool }) {
-      const tags = await callTool("list_tags", {});
-      if (!Array.isArray(tags)) throw new Error(`Expected array from list_tags, got ${typeof tags}`);
-      if (tags.length === 0) {
-        console.log("    (no tags seeded — skipping tag filter assertion)");
-        return;
+      // Items must be deleted before locations (cascade risk)
+      const itemsResult = await callTool("search_items", { query: "" });
+      const items = itemsResult?.items ?? itemsResult ?? [];
+      for (const item of items) {
+        await callTool("delete_item", { itemId: item.id });
       }
-      const result = await callTool("get_items_by_tag", { tagId: tags[0].id });
-      if (!Array.isArray(result)) throw new Error(`Expected array, got ${typeof result}`);
+
+      const locations = await callTool("list_locations", {});
+      for (const loc of (locations as any[])) {
+        await callTool("delete_location", { locationId: loc.id });
+      }
+
+      const tags = await callTool("list_tags", {});
+      for (const tag of (tags as any[])) {
+        await callTool("delete_tag", { tagId: tag.id });
+      }
+
+      // Verify clean state
+      const remainingLocations = await callTool("list_locations", {});
+      if ((remainingLocations as any[]).length !== 0)
+        throw new Error(`Expected 0 locations after wipe, got ${(remainingLocations as any[]).length}`);
+      const remainingTags = await callTool("list_tags", {});
+      if ((remainingTags as any[]).length !== 0)
+        throw new Error(`Expected 0 tags after wipe, got ${(remainingTags as any[]).length}`);
+    },
+  },
+
+  {
+    name: "locations: create, read, then delete",
+    async run({ callTool }) {
+      const created = await callTool("create_location", { name: "Test Location", description: "e2e test location" });
+      if (!created.id) throw new Error("Expected created location to have an id");
+
+      const listed = await callTool("list_locations", {});
+      if (!(listed as any[]).find((l: any) => l.id === created.id))
+        throw new Error("Created location not found in list_locations");
+
+      const fetched = await callTool("get_location", { locationId: created.id });
+      if (fetched.id !== created.id) throw new Error("get_location returned wrong id");
+      if (fetched.name !== "Test Location") throw new Error(`Expected name 'Test Location', got '${fetched.name}'`);
+
+      await callTool("delete_location", { locationId: created.id });
+
+      const after = await callTool("list_locations", {});
+      if ((after as any[]).find((l: any) => l.id === created.id))
+        throw new Error("Location still present after delete");
+    },
+  },
+
+  {
+    name: "tags: create, read, then delete",
+    async run({ callTool }) {
+      const created = await callTool("create_tag", { name: "test-tag" });
+      if (!created.id) throw new Error("Expected created tag to have an id");
+
+      const listed = await callTool("list_tags", {});
+      if (!(listed as any[]).find((l: any) => l.id === created.id))
+        throw new Error("Created tag not found in list_tags");
+
+      const fetched = await callTool("get_tag", { tagId: created.id });
+      if (fetched.id !== created.id) throw new Error("get_tag returned wrong id");
+      if (fetched.name !== "test-tag") throw new Error(`Expected name 'test-tag', got '${fetched.name}'`);
+
+      await callTool("delete_tag", { tagId: created.id });
+
+      const after = await callTool("list_tags", {});
+      if ((after as any[]).find((l: any) => l.id === created.id))
+        throw new Error("Tag still present after delete");
+    },
+  },
+
+  {
+    name: "items: create, read, update, search, then delete",
+    async run({ callTool }) {
+      const location = await callTool("create_location", { name: "Item Test Location" });
+
+      const created = await callTool("create_item", {
+        name: "Test Item",
+        locationId: location.id,
+        description: "Created by e2e test",
+      });
+      if (!created.id) throw new Error("Expected created item to have an id");
+
+      const fetched = await callTool("get_item", { itemId: created.id });
+      if (fetched.name !== "Test Item") throw new Error(`Expected 'Test Item', got '${fetched.name}'`);
+      if (!Array.isArray(fetched.tags)) throw new Error("Expected item.tags to be an array");
+      if (fetched.labels !== undefined) throw new Error("Expected item.labels to be absent (normalized to tags)");
+
+      const tag = await callTool("create_tag", { name: "e2e-tag" });
+      if (!tag.id) throw new Error("Expected created tag to have an id");
+
+      await callTool("update_item", {
+        itemId: created.id,
+        name: "Test Item (updated)",
+        locationId: location.id,
+        description: "Updated by e2e test",
+        quantity: 2,
+        tagIds: [tag.id],
+      });
+
+      const updated = await callTool("get_item", { itemId: created.id });
+      if (updated.name !== "Test Item (updated)") throw new Error(`Expected updated name, got '${updated.name}'`);
+      if (updated.quantity !== 2) throw new Error(`Expected quantity 2, got ${updated.quantity}`);
+      if (!Array.isArray(updated.tags)) throw new Error("Expected item.tags to be an array");
+      if (updated.labels !== undefined) throw new Error("Expected item.labels to be absent (normalized to tags)");
+      if (!(updated.tags as any[]).find((t: any) => t.id === tag.id))
+        throw new Error("Tag not found on updated item");
+
+      const searchResult = await callTool("search_items", { query: "updated" });
+      const items = searchResult?.items ?? searchResult ?? [];
+      const found = (items as any[]).find((i: any) => i.id === created.id);
+      if (!found) throw new Error("Updated item not found in search results");
+      if (!Array.isArray(found.tags)) throw new Error("Expected search result item.tags to be an array");
+      if (found.labels !== undefined) throw new Error("Expected search result item.labels to be absent (normalized to tags)");
+
+      // Cleanup
+      await callTool("delete_item", { itemId: created.id });
+      await callTool("delete_tag", { tagId: tag.id });
+      await callTool("delete_location", { locationId: location.id });
+
+      const after = await callTool("list_locations", {});
+      if ((after as any[]).find((l: any) => l.id === location.id))
+        throw new Error("Location still present after delete");
+    },
+  },
+
+  {
+    name: "maintenance entries: create, then delete",
+    async run({ callTool }) {
+      const location = await callTool("create_location", { name: "Maintenance Test Location" });
+      const item = await callTool("create_item", { name: "Maintenance Test Item", locationId: location.id });
+
+      const entry = await callTool("create_maintenance_entry", {
+        itemId: item.id,
+        name: "Annual service",
+        completedDate: "2026-05-08T00:00:00Z",
+        scheduledDate: "2026-05-08T00:00:00Z",
+        cost: "150.00",
+      });
+      if (!entry.id) throw new Error("Expected maintenance entry to have an id");
+
+      await callTool("delete_maintenance_entry", { entryId: entry.id });
+
+      const fetched = await callTool("get_item", { itemId: item.id });
+      const entries = fetched.maintenanceEntries ?? fetched.maintenance ?? [];
+      if ((entries as any[]).length !== 0)
+        throw new Error(`Expected 0 maintenance entries after delete, got ${(entries as any[]).length}`);
+
+      // Cleanup
+      await callTool("delete_item", { itemId: item.id });
+      await callTool("delete_location", { locationId: location.id });
     },
   },
   {
-    name: "search_items with locationId filter returns array",
+    name: "item filters: get_items_by_location, get_items_by_tag, and search_items with filters return correct items",
     async run({ callTool }) {
-      const locations = await callTool("list_locations", {});
-      if (!Array.isArray(locations) || locations.length === 0) throw new Error("No locations to test with");
-      const result = await callTool("search_items", { query: "", locationId: locations[0].id });
-      const items = result?.items ?? result;
-      if (!Array.isArray(items)) throw new Error(`Expected array, got ${typeof items}`);
+      // Seed: two locations, two tags, two items — one item per location, each tagged differently
+      const locA = await callTool("create_location", { name: "Filter Location A" });
+      const locB = await callTool("create_location", { name: "Filter Location B" });
+      const tagA = await callTool("create_tag", { name: "filter-tag-a" });
+      const tagB = await callTool("create_tag", { name: "filter-tag-b" });
+
+      const itemA = await callTool("create_item", { name: "Filter Item A", locationId: locA.id });
+      await callTool("update_item", { itemId: itemA.id, name: "Filter Item A", locationId: locA.id, tagIds: [tagA.id] });
+
+      const itemB = await callTool("create_item", { name: "Filter Item B", locationId: locB.id });
+      await callTool("update_item", { itemId: itemB.id, name: "Filter Item B", locationId: locB.id, tagIds: [tagB.id] });
+
+      // get_items_by_location: locA must return only itemA
+      const byLocA = await callTool("get_items_by_location", { locationId: locA.id });
+      if (!Array.isArray(byLocA)) throw new Error(`get_items_by_location: expected array, got ${typeof byLocA}`);
+      if (!byLocA.find((i: any) => i.id === itemA.id)) throw new Error("get_items_by_location: itemA missing from locA results");
+      if (byLocA.find((i: any) => i.id === itemB.id)) throw new Error("get_items_by_location: itemB leaked into locA results");
+
+      // get_items_by_tag: tagA must return only itemA
+      const byTagA = await callTool("get_items_by_tag", { tagId: tagA.id });
+      if (!Array.isArray(byTagA)) throw new Error(`get_items_by_tag: expected array, got ${typeof byTagA}`);
+      if (!byTagA.find((i: any) => i.id === itemA.id)) throw new Error("get_items_by_tag: itemA missing from tagA results");
+      if (byTagA.find((i: any) => i.id === itemB.id)) throw new Error("get_items_by_tag: itemB leaked into tagA results");
+
+      // search_items with locationId filter: only itemA should appear
+      const searchByLoc = await callTool("search_items", { query: "Filter", locationId: locA.id });
+      const searchByLocItems: any[] = searchByLoc?.items ?? searchByLoc ?? [];
+      if (!Array.isArray(searchByLocItems)) throw new Error(`search_items+locationId: expected array, got ${typeof searchByLocItems}`);
+      if (!searchByLocItems.find((i: any) => i.id === itemA.id)) throw new Error("search_items+locationId: itemA missing");
+      if (searchByLocItems.find((i: any) => i.id === itemB.id)) throw new Error("search_items+locationId: itemB leaked in");
+
+      // search_items with tagId filter: only itemB should appear
+      const searchByTag = await callTool("search_items", { query: "Filter", tagId: tagB.id });
+      const searchByTagItems: any[] = searchByTag?.items ?? searchByTag ?? [];
+      if (!Array.isArray(searchByTagItems)) throw new Error(`search_items+tagId: expected array, got ${typeof searchByTagItems}`);
+      if (!searchByTagItems.find((i: any) => i.id === itemB.id)) throw new Error("search_items+tagId: itemB missing");
+      if (searchByTagItems.find((i: any) => i.id === itemA.id)) throw new Error("search_items+tagId: itemA leaked in");
+
+      // search_items with both locationId and tagId: only itemA (locA + tagA) should appear
+      const searchBoth = await callTool("search_items", { query: "Filter", locationId: locA.id, tagId: tagA.id });
+      const searchBothItems: any[] = searchBoth?.items ?? searchBoth ?? [];
+      if (!Array.isArray(searchBothItems)) throw new Error(`search_items+both: expected array, got ${typeof searchBothItems}`);
+      if (!searchBothItems.find((i: any) => i.id === itemA.id)) throw new Error("search_items+both: itemA missing");
+      if (searchBothItems.find((i: any) => i.id === itemB.id)) throw new Error("search_items+both: itemB leaked in");
+
+      // Cleanup
+      await callTool("delete_item", { itemId: itemA.id });
+      await callTool("delete_item", { itemId: itemB.id });
+      await callTool("delete_tag", { tagId: tagA.id });
+      await callTool("delete_tag", { tagId: tagB.id });
+      await callTool("delete_location", { locationId: locA.id });
+      await callTool("delete_location", { locationId: locB.id });
     },
   },
 ];
