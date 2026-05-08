@@ -9,9 +9,9 @@ This MCP server acts as a bridge between AI assistants (like Claude) and your Ho
 - Search for items in your inventory
 - Get detailed information about specific items
 - List all locations where you store things
-- List all labels/categories you use
+- List all tags/categories you use
 - Find all items in a specific location
-- Find all items with a specific label
+- Find all items with a specific tag
 
 ## Deployment Options
 
@@ -204,17 +204,17 @@ Once configured, you can ask Claude to interact with your Homebox inventory. Her
 
 "What items do I have in the garage?" (first get the location ID using list_locations, then use get_items_by_location)
 
-### List All Labels
+### List All Tags
 
-"What labels/categories do I use in Homebox?"
+"What tags/categories do I use in Homebox?"
 
 ### Get Item Details
 
 "Can you get the full details for item ID 123?"
 
-### Find Items by Label
+### Find Items by Tag
 
-"Show me all items labeled as 'Electronics'"
+"Show me all items tagged as 'Electronics'"
 
 For more detailed examples and use cases, see [EXAMPLES.md](EXAMPLES.md).
 
@@ -226,10 +226,10 @@ The MCP server provides these tools:
 2. **get_item** - Get complete details about a specific item
 3. **list_locations** - List all storage locations
 4. **get_location** - Get details about a specific location
-5. **list_labels** - List all labels/categories
-6. **get_label** - Get details about a specific label
+5. **list_tags** - List all tags/categories
+6. **get_tag** - Get details about a specific tag
 7. **get_items_by_location** - Get all items in a location
-8. **get_items_by_label** - Get all items with a label
+8. **get_items_by_tag** - Get all items with a tag
 
 ## Troubleshooting
 
@@ -301,6 +301,12 @@ The test suite spins up a local Homebox instance via Docker Compose and exercise
 
 ```bash
 npm run test:e2e
+```
+
+To test against an older Homebox version (e.g. to verify the legacy `/api/v1/labels` endpoint fallback for versions prior to v0.23.0):
+
+```bash
+HOMEBOX_VERSION=0.22.3 npm run test:e2e
 ```
 
 ## License

@@ -1,9 +1,8 @@
 # Test stack for `npm run test:e2e`. Managed automatically by src/test-e2e.ts —
-# do not bring up manually. Homebox is pinned to the last version that uses the
-# /api/v1/labels endpoint; upgrade in lockstep with any labels→tags migration.
+# do not bring up manually.
 services:
   homebox:
-    image: ghcr.io/sysadminsmedia/homebox:0.22.3
+    image: ghcr.io/sysadminsmedia/homebox:${HOMEBOX_VERSION:-0.25.0}
     environment:
       - HBOX_LOG_LEVEL=warn
       - HBOX_OPTIONS_ALLOW_REGISTRATION=true

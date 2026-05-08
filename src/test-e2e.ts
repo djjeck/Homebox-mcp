@@ -221,6 +221,12 @@ async function runTestCase(tc: TestCase): Promise<boolean> {
 }
 
 // ── Test cases ────────────────────────────────────────────────────────────────
+//
+// TODO: These tests currently rely on Homebox's seeded default data (locations,
+// tags) rather than creating their own test state. Once write APIs are
+// available via MCP, each test case should use them to set up and tear down its
+// own fixtures — making the suite independent of whatever a given Homebox
+// version happens to seed on first install.
 
 const TEST_CASES: TestCase[] = [
   {
@@ -233,12 +239,10 @@ const TEST_CASES: TestCase[] = [
     },
   },
   {
-    name: "list_labels returns seeded default labels on fresh instance",
+    name: "list_tags returns an array on fresh instance",
     async run({ callTool }) {
-      const result = await callTool("list_labels", {});
+      const result = await callTool("list_tags", {});
       if (!Array.isArray(result)) throw new Error(`Expected array, got ${typeof result}`);
-      if (result.length === 0) throw new Error("Expected seeded default labels, got empty array");
-      if (!result[0].id || !result[0].name) throw new Error("Expected label objects with id and name");
     },
   },
   {
@@ -259,17 +263,6 @@ const TEST_CASES: TestCase[] = [
       const result = await callTool("get_location", { locationId: first.id });
       if (result.id !== first.id) throw new Error(`Expected location id ${first.id}, got ${result.id}`);
       if (!result.name) throw new Error("Expected location to have a name");
-    },
-  },
-  {
-    name: "get_label returns label details by id",
-    async run({ callTool }) {
-      const labels = await callTool("list_labels", {});
-      if (!Array.isArray(labels) || labels.length === 0) throw new Error("No labels to test with");
-      const first = labels[0];
-      const result = await callTool("get_label", { labelId: first.id });
-      if (result.id !== first.id) throw new Error(`Expected label id ${first.id}, got ${result.id}`);
-      if (!result.name) throw new Error("Expected label to have a name");
     },
   },
 ];

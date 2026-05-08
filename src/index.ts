@@ -34,6 +34,9 @@ class HomeboxClient {
   private axios: AxiosInstance;
   private config: HomeboxConfig;
   private authToken: string | null = null;
+  // Homebox renamed /api/v1/labels to /api/v1/tags in v0.23.0.
+  // Detected at startup via /api/v1/status and set in authenticate().
+  private tagEndpoint: string = "/api/v1/tags";
 
   constructor(config: HomeboxConfig) {
     this.config = config;
@@ -62,6 +65,20 @@ class HomeboxClient {
       }
     } catch (error: any) {
       throw new Error(`Authentication failed: ${error.message}`);
+    }
+
+    try {
+      const status = await this.axios.get("/api/v1/status");
+      const version: string = status.data?.build?.version ?? "v0.0.0";
+      // Strip leading "v" and compare numerically
+      const [major, minor] = version.replace(/^v/, "").split(".").map(Number);
+      // Tags endpoint introduced in v0.23.0
+      if (major === 0 && minor < 23) {
+        this.tagEndpoint = "/api/v1/labels";
+      }
+      console.error(`Homebox version: ${version} — using tag endpoint: ${this.tagEndpoint}`);
+    } catch {
+      console.error(`Could not detect Homebox version, defaulting to ${this.tagEndpoint}`);
     }
   }
 
@@ -107,23 +124,23 @@ class HomeboxClient {
     }
   }
 
-  async listLabels(): Promise<any> {
+  async listTags(): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get("/api/v1/labels");
+      const response = await this.axios.get(this.tagEndpoint);
       return response.data;
     } catch (error: any) {
-      throw new Error(`Failed to list labels: ${error.message}`);
+      throw new Error(`Failed to list tags: ${error.message}`);
     }
   }
 
-  async getLabel(labelId: string): Promise<any> {
+  async getTag(tagId: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get(`/api/v1/labels/${labelId}`);
+      const response = await this.axios.get(`${this.tagEndpoint}/${tagId}`);
       return response.data;
     } catch (error: any) {
-      throw new Error(`Failed to get label: ${error.message}`);
+      throw new Error(`Failed to get tag: ${error.message}`);
     }
   }
 
@@ -137,13 +154,13 @@ class HomeboxClient {
     }
   }
 
-  async getItemsByLabel(labelId: string): Promise<any> {
+  async getItemsByTag(tagId: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get(`/api/v1/labels/${labelId}/items`);
+      const response = await this.axios.get(`${this.tagEndpoint}/${tagId}/items`);
       return response.data;
     } catch (error: any) {
-      throw new Error(`Failed to get items by label: ${error.message}`);
+      throw new Error(`Failed to get items by tag: ${error.message}`);
     }
   }
 
@@ -220,7 +237,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: "get_item",
-    description: "Get detailed information about a specific item by its ID. Returns complete item details including name, description, location, labels, purchase info, warranty info, and more.",
+    description: "Get detailed information about a specific item by its ID. Returns complete item details including name, description, location, tags, purchase info, warranty info, and more.",
     inputSchema: {
       type: "object",
       properties: {
@@ -255,25 +272,25 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "list_labels",
-    description: "List all labels in your Homebox inventory. Labels are used to categorize items (e.g., 'Electronics', 'Important', 'Fragile'). Returns label names, IDs, and descriptions.",
+    name: "list_tags",
+    description: "List all tags in your Homebox inventory. Tags are used to categorize items (e.g., 'Electronics', 'Important', 'Fragile'). Returns tag names, IDs, and descriptions.",
     inputSchema: {
       type: "object",
       properties: {},
     },
   },
   {
-    name: "get_label",
-    description: "Get detailed information about a specific label by its ID, including its name, description, and color.",
+    name: "get_tag",
+    description: "Get detailed information about a specific tag by its ID, including its name, description, and color.",
     inputSchema: {
       type: "object",
       properties: {
-        labelId: {
+        tagId: {
           type: "string",
-          description: "The ID of the label to retrieve",
+          description: "The ID of the tag to retrieve",
         },
       },
-      required: ["labelId"],
+      required: ["tagId"],
     },
   },
   {
@@ -291,17 +308,17 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "get_items_by_label",
-    description: "Get all items that have a specific label. Useful for finding all items in a category (e.g., all electronics, all important items).",
+    name: "get_items_by_tag",
+    description: "Get all items that have a specific tag. Useful for finding all items in a category (e.g., all electronics, all important items).",
     inputSchema: {
       type: "object",
       properties: {
-        labelId: {
+        tagId: {
           type: "string",
-          description: "The ID of the label",
+          description: "The ID of the tag",
         },
       },
-      required: ["labelId"],
+      required: ["tagId"],
     },
   },
 ];
@@ -414,8 +431,8 @@ async function main() {
           };
         }
 
-        case "list_labels": {
-          const result = await homeboxClient.listLabels();
+        case "list_tags": {
+          const result = await homeboxClient.listTags();
           return {
             content: [
               {
@@ -426,8 +443,8 @@ async function main() {
           };
         }
 
-        case "get_label": {
-          const result = await homeboxClient.getLabel(args.labelId as string);
+        case "get_tag": {
+          const result = await homeboxClient.getTag(args.tagId as string);
           return {
             content: [
               {
@@ -450,8 +467,8 @@ async function main() {
           };
         }
 
-        case "get_items_by_label": {
-          const result = await homeboxClient.getItemsByLabel(args.labelId as string);
+        case "get_items_by_tag": {
+          const result = await homeboxClient.getItemsByTag(args.tagId as string);
           return {
             content: [
               {

@@ -23,9 +23,9 @@ Pantry
 └── Bar Supplies
 ```
 
-#### Labels/Tags
+#### Tags
 
-Create these labels in Homebox:
+Create these tags in Homebox:
 
 - `Spirits` - All alcoholic spirits
 - `Liquor` - General alcohol category
@@ -53,7 +53,7 @@ Add sub-categories for spirits:
 Name: Grey Goose Vodka
 Description: Premium French vodka, 750ml, 40% ABV. Opened: 2024-11-01
 Location: Bar Cart > Top Shelf
-Labels: Spirits, Vodka, Liquor
+Tags: Spirits, Vodka, Liquor
 Quantity: 1
 ```
 
@@ -63,7 +63,7 @@ Quantity: 1
 Name: Tonic Water
 Description: Fever-Tree Premium Indian Tonic Water, 4-pack
 Location: Bar Cart > Bottom Shelf
-Labels: Mixers
+Tags: Mixers
 Quantity: 3
 ```
 
@@ -73,7 +73,7 @@ Quantity: 3
 Name: Cocktail Shaker
 Description: Stainless steel Boston shaker, 28oz
 Location: Bar Cart > Tools Drawer
-Labels: Bar Tools
+Tags: Bar Tools
 Quantity: 1
 ```
 
@@ -127,7 +127,7 @@ Tools Drawer:
 ```
 User: Show me all my vodka
 
-LLM: [Calls get_items_by_label("Vodka")]
+LLM: [Calls get_items_by_tag("Vodka")]
 You have these vodkas in your collection:
 
 • Grey Goose Vodka
@@ -398,9 +398,9 @@ Description: "750ml, 40% ABV, opened 2024-11"
 ### 3. Track Open vs Sealed
 
 ```
-Labels: ["Spirits", "Vodka", "Open"]
+Tags: ["Spirits", "Vodka", "Open"]
 or
-Labels: ["Spirits", "Vodka", "Sealed"]
+Tags: ["Spirits", "Vodka", "Sealed"]
 ```
 
 ### 4. Use Custom Fields for:

@@ -64,24 +64,24 @@ Same process - Claude finds the location and lists all items there
 
 ---
 
-## Working with Labels
+## Working with Tags
 
-### List All Labels
+### List All Tags
 
 **Ask Claude:**
 
-> "What labels am I using in Homebox?"
+> "What tags am I using in Homebox?"
 
 or
 
 > "Show me all my item categories"
 
 **What happens:**
-Claude uses `list_labels` to show all your labels/categories
+Claude uses `list_tags` to show all your tags/categories
 
 ---
 
-### Find Items by Label
+### Find Items by Tag
 
 **Ask Claude:**
 
@@ -90,17 +90,17 @@ Claude uses `list_labels` to show all your labels/categories
 **What happens:**
 Claude will:
 
-1. Use `list_labels` to find the Electronics label ID
-2. Use `get_items_by_label` to show all electronics
+1. Use `list_tags` to find the Electronics tag ID
+2. Use `get_items_by_tag` to show all electronics
 
 ---
 
 **Ask Claude:**
 
-> "What do I have that's labeled 'Important Documents'?"
+> "What do I have that's tagged 'Important Documents'?"
 
 **What happens:**
-Same process for finding items with that label
+Same process for finding items with that tag
 
 ---
 
@@ -117,7 +117,7 @@ Claude uses `get_item` to show complete information including:
 
 - Name and description
 - Location
-- Labels
+- Tags
 - Purchase information (price, date, store)
 - Warranty information
 - Serial number
@@ -150,7 +150,7 @@ Claude will:
 **What happens:**
 Claude will:
 
-1. Find items labeled "Electronics"
+1. Find items tagged "Electronics"
 2. Count them
 3. Show you the locations for each
 
@@ -217,7 +217,7 @@ Claude can search through items and check their warranty fields
 Claude will:
 
 1. Get all locations
-2. Get all labels
+2. Get all tags
 3. Possibly sample some items
 4. Provide an overview of your inventory organization
 
@@ -243,7 +243,7 @@ Claude gets all garage items, adds up their purchase prices, and tells you the t
    - Then: "Which of those are power tools?"
 
 4. **Combine information:**
-   - "Which items in my basement are labeled as seasonal decorations?"
+   - "Which items in my basement are tagged as seasonal decorations?"
 
 5. **Request analysis:**
    - "Which room has the most items?"
@@ -256,7 +256,7 @@ When Claude retrieves data from Homebox, it can see:
 - **Item Information:**
   - Name, description
   - Location
-  - Labels/tags
+  - Tags
   - Purchase price, date, store
   - Warranty information
   - Serial numbers
@@ -269,11 +269,11 @@ When Claude retrieves data from Homebox, it can see:
   - Parent location (for nested locations)
   - All items in that location
 
-- **Label Information:**
-  - Label name
+- **Tag Information:**
+  - Tag name
   - Description
   - Color coding
-  - All items with that label
+  - All items with that tag
 
 ## Common Use Cases
 
@@ -309,7 +309,7 @@ The MCP server currently provides **read-only** access to your Homebox inventory
 - Update existing items
 - Delete items
 - Move items between locations
-- Add or remove labels
+- Add or remove tags
 
 For making changes, you'll need to use the Homebox web interface directly.
 

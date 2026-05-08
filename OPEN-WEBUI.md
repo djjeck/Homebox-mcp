@@ -207,13 +207,13 @@ What types of rum are in my inventory?
 
 The Homebox function provides these tools to the LLM:
 
-| Function                   | Purpose                 | Example Use                  |
-| -------------------------- | ----------------------- | ---------------------------- |
-| `search_homebox_items()`   | Search items by keyword | "Find vodka"                 |
-| `list_homebox_locations()` | Show all locations      | "What locations exist?"      |
-| `get_items_by_location()`  | Items in specific place | "What's in the bar?"         |
-| `list_homebox_labels()`    | Show all labels/tags    | "What categories do I have?" |
-| `get_items_by_label()`     | Items with specific tag | "Show me all alcohol"        |
+| Function                   | Purpose                                           | Example Use                  |
+| -------------------------- | ------------------------------------------------- | ---------------------------- |
+| `search_homebox_items()`   | Search items by keyword                           | "Find vodka"                 |
+| `list_homebox_locations()` | Show all locations                                | "What locations exist?"      |
+| `get_items_by_location()`  | Items in specific place                           | "What's in the bar?"         |
+| `list_homebox_labels()`    | Show all tags                                     | "What categories do I have?" |
+| `get_items_by_label()`     | Items with specific tag (legacy name — see above) | "Show me all alcohol"        |
 
 ## Setting Up Your Homebox for Best Results
 
@@ -226,9 +226,9 @@ To get the most out of this integration:
 ❌ "Bottle 1"
 ```
 
-### 2. Add Descriptive Labels
+### 2. Add Descriptive Tags
 
-Create labels like:
+Create tags like:
 
 - "Spirits"
 - "Liquor"
@@ -255,7 +255,7 @@ Include useful details:
 ```
 Name: "Tanqueray London Dry Gin"
 Description: "750ml, 47.3% ABV, opened 2024-01"
-Labels: ["Gin", "Spirits", "Alcohol"]
+Tags: ["Gin", "Spirits", "Alcohol"]
 Location: "Bar Cabinet"
 Quantity: 1
 ```
@@ -461,7 +461,7 @@ Edit the function code and add more methods following the same pattern.
 
 1. ✅ Install the function following steps above
 2. ✅ Test with a simple query
-3. ✅ Organize your Homebox inventory with clear labels and locations
+3. ✅ Organize your Homebox inventory with clear tags and locations
 4. ✅ Try cocktail recipe queries!
 5. ✅ Explore other use cases (tools, supplies, collections, etc.)
 
