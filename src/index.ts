@@ -184,6 +184,123 @@ class HomeboxClient {
     }
   }
 
+  async createLocation(name: string, description?: string): Promise<any> {
+    await this.ensureAuthenticated();
+    try {
+      const response = await this.axios.post("/api/v1/locations", { name, description });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to create location: ${error.message}`);
+    }
+  }
+
+  async deleteMaintenanceEntry(entryId: string): Promise<void> {
+    await this.ensureAuthenticated();
+    try {
+      await this.axios.delete(`/api/v1/maintenance/${entryId}`);
+    } catch (error: any) {
+      throw new Error(`Failed to delete maintenance entry: ${error.message}`);
+    }
+  }
+
+  async createMaintenanceEntry(
+    itemId: string,
+    name: string,
+    completedDate?: string,
+    scheduledDate?: string,
+    description?: string,
+    cost?: string
+  ): Promise<any> {
+    await this.ensureAuthenticated();
+    try {
+      const response = await this.axios.post(`/api/v1/items/${itemId}/maintenance`, {
+        name,
+        completedDate,
+        scheduledDate,
+        description,
+        cost,
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to create maintenance entry: ${error.message}`);
+    }
+  }
+
+  async updateItem(itemId: string, data: Record<string, any>): Promise<any> {
+    await this.ensureAuthenticated();
+    try {
+      // v0.22.x expects labelIds; v0.23.0+ expects tagIds. Translate if needed.
+      let body = data;
+      if (this.tagFilterParam === "labels" && "tagIds" in data) {
+        const { tagIds, ...rest } = data;
+        body = { ...rest, labelIds: tagIds };
+      }
+      const response = await this.axios.put(`/api/v1/items/${itemId}`, body);
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to update item: ${error.message}`);
+    }
+  }
+
+  async createItem(
+    name: string,
+    locationId: string,
+    description?: string,
+    tagIds?: string[],
+    parentId?: string
+  ): Promise<any> {
+    await this.ensureAuthenticated();
+    try {
+      const response = await this.axios.post("/api/v1/items", {
+        name,
+        locationId,
+        description,
+        labelIds: tagIds,
+        parentId,
+      });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to create item: ${error.message}`);
+    }
+  }
+
+  async createTag(name: string, description?: string): Promise<any> {
+    await this.ensureAuthenticated();
+    try {
+      const response = await this.axios.post(this.tagEndpoint, { name, description });
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to create tag: ${error.message}`);
+    }
+  }
+
+  async deleteItem(itemId: string): Promise<void> {
+    await this.ensureAuthenticated();
+    try {
+      await this.axios.delete(`/api/v1/items/${itemId}`);
+    } catch (error: any) {
+      throw new Error(`Failed to delete item: ${error.message}`);
+    }
+  }
+
+  async deleteLocation(locationId: string): Promise<void> {
+    await this.ensureAuthenticated();
+    try {
+      await this.axios.delete(`/api/v1/locations/${locationId}`);
+    } catch (error: any) {
+      throw new Error(`Failed to delete location: ${error.message}`);
+    }
+  }
+
+  async deleteTag(tagId: string): Promise<void> {
+    await this.ensureAuthenticated();
+    try {
+      await this.axios.delete(`${this.tagEndpoint}/${tagId}`);
+    } catch (error: any) {
+      throw new Error(`Failed to delete tag: ${error.message}`);
+    }
+  }
+
   // Homebox < v0.23.0 returns item.labels; v0.23.0+ returns item.tags.
   // Normalize to always expose item.tags so callers see a consistent shape.
   private normalizeItem(item: any): any {
@@ -289,7 +406,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: "list_locations",
-    description: "List all locations in your Homebox inventory. Locations are where items are stored (e.g., 'Kitchen', 'Garage', 'Living Room'). Returns location names, IDs, and descriptions.",
+    description: "List all locations in your Homebox inventory. Locations are where items are stored (e.g., 'Office', 'Warehouse', 'Storage Room'). Returns location names, IDs, and descriptions.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -333,7 +450,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: "get_items_by_location",
-    description: "Get all items stored in a specific location. Useful for finding everything in a particular room or storage area.",
+    description: "Get all items stored in a specific location. Useful for finding everything in a particular location or storage area.",
     inputSchema: {
       type: "object",
       properties: {
@@ -354,6 +471,285 @@ const TOOLS: Tool[] = [
         tagId: {
           type: "string",
           description: "The ID of the tag",
+        },
+      },
+      required: ["tagId"],
+    },
+  },
+  {
+    name: "delete_maintenance_entry",
+    description: "Delete a maintenance entry by its ID. Note: use the top-level maintenance entry ID, not the item ID. The entry is permanently removed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entryId: {
+          type: "string",
+          description: "ID of the maintenance entry to delete",
+        },
+      },
+      required: ["entryId"],
+    },
+  },
+  {
+    name: "create_maintenance_entry",
+    description: "Record a maintenance event on an item. At least one of completedDate or scheduledDate must be provided (the API returns 500 otherwise). For completed work, set both to the same date. Cost must be a string, not a number (e.g. \"85.00\").",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: {
+          type: "string",
+          description: "ID of the item this maintenance entry belongs to",
+        },
+        name: {
+          type: "string",
+          description: "Name of the maintenance task (e.g. 'Annual service', 'Battery replacement')",
+        },
+        completedDate: {
+          type: "string",
+          description: "Date the work was completed, in ISO 8601 format with time component (e.g. 2026-05-01T00:00:00Z)",
+        },
+        scheduledDate: {
+          type: "string",
+          description: "Date the work is scheduled for, in ISO 8601 format with time component (e.g. 2026-06-01T00:00:00Z)",
+        },
+        description: {
+          type: "string",
+          description: "Notes about the work performed, findings, or next steps",
+        },
+        cost: {
+          type: "string",
+          description: "Cost of the service as a numeric string (e.g. \"85.00\")",
+        },
+      },
+      required: ["itemId", "name"],
+    },
+  },
+  {
+    name: "update_item",
+    description: "Update an existing item by ID. Accepts the full set of writable item fields. Always fetch the current item with get_item first and carry forward any fields you are not changing — this is a full replacement (PUT), not a partial update (PATCH).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: {
+          type: "string",
+          description: "ID of the item to update",
+        },
+        name: {
+          type: "string",
+          description: "Name of the item",
+        },
+        description: {
+          type: "string",
+          description: "Description of the item: model details, specs, notable characteristics (max 1000 characters).",
+        },
+        quantity: {
+          type: "integer",
+          description: "Number of units",
+        },
+        locationId: {
+          type: "string",
+          description: "ID of the location where the item is stored",
+        },
+        tagIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of tag IDs to attach to the item (replaces existing tags)",
+        },
+        parentId: {
+          type: "string",
+          description: "ID of a parent item, if this item is a sub-item",
+        },
+        assetId: {
+          type: "string",
+          description: "Asset tracking number",
+        },
+        archived: {
+          type: "boolean",
+          description: "Whether the item is archived",
+        },
+        insured: {
+          type: "boolean",
+          description: "Whether the item is insured",
+        },
+        serialNumber: {
+          type: "string",
+          description: "Serial number of the item",
+        },
+        modelNumber: {
+          type: "string",
+          description: "Model number of the item",
+        },
+        manufacturer: {
+          type: "string",
+          description: "Manufacturer or brand",
+        },
+        purchaseTime: {
+          type: "string",
+          description: "Date of purchase in ISO 8601 format with time component (e.g. 2025-08-28T00:00:00Z)",
+        },
+        purchaseFrom: {
+          type: "string",
+          description: "Vendor or store where the item was purchased",
+        },
+        purchasePrice: {
+          type: "string",
+          description: "Original purchase price as a numeric string (no currency symbol)",
+        },
+        lifetimeWarranty: {
+          type: "boolean",
+          description: "Whether the item has a lifetime warranty",
+        },
+        warrantyExpires: {
+          type: "string",
+          description: "Warranty expiration date in ISO 8601 format with time component (e.g. 2028-08-28T00:00:00Z)",
+        },
+        warrantyDetails: {
+          type: "string",
+          description: "Free-text warranty description (e.g. 'Parts: 3 years. Labor: 1 year.')",
+        },
+        soldTime: {
+          type: "string",
+          description: "Date the item was sold or retired, in ISO 8601 format with time component",
+        },
+        soldTo: {
+          type: "string",
+          description: "Name of the buyer, or empty string if retired without a sale",
+        },
+        soldPrice: {
+          type: "string",
+          description: "Sale price as a numeric string, or '0' if retired without a sale",
+        },
+        soldNotes: {
+          type: "string",
+          description: "Notes about the sale or retirement (e.g. why retired, what replaced it)",
+        },
+        notes: {
+          type: "string",
+          description: "Additional structured properties that don't fit a native field (e.g. color, voltage, compatible accessories). Max 1000 characters.",
+        },
+        fields: {
+          type: "array",
+          description: "Custom fields. Each field has a name, type ('text', 'number', 'boolean', 'date'), and a corresponding value key (textValue, numberValue, booleanValue, timeValue).",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              type: { type: "string" },
+              textValue: { type: "string" },
+              numberValue: { type: "number" },
+              booleanValue: { type: "boolean" },
+              timeValue: { type: "string" },
+            },
+          },
+        },
+      },
+      required: ["itemId", "name", "locationId"],
+    },
+  },
+  {
+    name: "create_item",
+    description: "Create a new item in Homebox. Only a subset of fields can be set on creation (name, locationId, description, tagIds, parentId). Use update_item afterward to set warranty, purchase info, serial number, custom fields, and other metadata. Returns the created item including its new ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Name of the item",
+        },
+        locationId: {
+          type: "string",
+          description: "ID of the location where the item is stored",
+        },
+        description: {
+          type: "string",
+          description: "Description of the item (max 1000 characters)",
+        },
+        tagIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of tag IDs to attach to the item",
+        },
+        parentId: {
+          type: "string",
+          description: "ID of a parent item, if this item is a sub-item",
+        },
+      },
+      required: ["name", "locationId"],
+    },
+  },
+  {
+    name: "create_tag",
+    description: "Create a new tag in Homebox. Tags are used to categorize items across locations (e.g., 'Electronics', 'Fragile', 'High Value'). Returns the created tag including its new ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Name of the tag",
+        },
+        description: {
+          type: "string",
+          description: "Optional description of the tag",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "create_location",
+    description: "Create a new location in Homebox. Locations are physical places where items are stored (e.g., 'Office', 'Storage Room'). Returns the created location including its new ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Name of the location",
+        },
+        description: {
+          type: "string",
+          description: "Optional description of the location",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "delete_item",
+    description: "Permanently delete an item by ID. This cannot be undone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: {
+          type: "string",
+          description: "ID of the item to delete",
+        },
+      },
+      required: ["itemId"],
+    },
+  },
+  {
+    name: "delete_location",
+    description: "Permanently delete a location by ID. Do not delete a location that still contains items — deletion cascades and removes all items in it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        locationId: {
+          type: "string",
+          description: "ID of the location to delete",
+        },
+      },
+      required: ["locationId"],
+    },
+  },
+  {
+    name: "delete_tag",
+    description: "Permanently delete a tag by ID. Items that had this tag will have it removed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tagId: {
+          type: "string",
+          description: "ID of the tag to delete",
         },
       },
       required: ["tagId"],
@@ -518,6 +914,119 @@ async function main() {
                 text: JSON.stringify(result, null, 2),
               },
             ],
+          };
+        }
+
+        case "delete_maintenance_entry": {
+          await homeboxClient.deleteMaintenanceEntry(args.entryId as string);
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Maintenance entry deleted successfully.",
+              },
+            ],
+          };
+        }
+
+        case "create_maintenance_entry": {
+          const result = await homeboxClient.createMaintenanceEntry(
+            args.itemId as string,
+            args.name as string,
+            args.completedDate as string | undefined,
+            args.scheduledDate as string | undefined,
+            args.description as string | undefined,
+            args.cost as string | undefined
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "update_item": {
+          const { itemId, ...data } = args as { itemId: string; [key: string]: any };
+          const result = await homeboxClient.updateItem(itemId, data);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "create_item": {
+          const result = await homeboxClient.createItem(
+            args.name as string,
+            args.locationId as string,
+            args.description as string | undefined,
+            args.tagIds as string[] | undefined,
+            args.parentId as string | undefined
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "create_tag": {
+          const result = await homeboxClient.createTag(
+            args.name as string,
+            args.description as string | undefined
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "create_location": {
+          const result = await homeboxClient.createLocation(
+            args.name as string,
+            args.description as string | undefined
+          );
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(result, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "delete_item": {
+          await homeboxClient.deleteItem(args.itemId as string);
+          return {
+            content: [{ type: "text", text: "Item deleted successfully." }],
+          };
+        }
+
+        case "delete_location": {
+          await homeboxClient.deleteLocation(args.locationId as string);
+          return {
+            content: [{ type: "text", text: "Location deleted successfully." }],
+          };
+        }
+
+        case "delete_tag": {
+          await homeboxClient.deleteTag(args.tagId as string);
+          return {
+            content: [{ type: "text", text: "Tag deleted successfully." }],
           };
         }
 
