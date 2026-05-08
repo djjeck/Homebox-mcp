@@ -5,7 +5,9 @@ Once you have the Homebox MCP server configured with Claude Desktop, you can ask
 ## Basic Searches
 
 ### Search for Items
+
 **Ask Claude:**
+
 > "Can you search my Homebox inventory for 'screwdriver'?"
 
 **What happens:**
@@ -14,6 +16,7 @@ Claude will use the `search_items` tool to find all items matching "screwdriver"
 ---
 
 **Ask Claude:**
+
 > "Do I have any power tools in my inventory?"
 
 **What happens:**
@@ -24,7 +27,9 @@ Claude searches for "power tools" and shows you the results
 ## Exploring Locations
 
 ### List All Locations
+
 **Ask Claude:**
+
 > "What locations do I have in my Homebox?"
 
 or
@@ -37,17 +42,21 @@ Claude uses `list_locations` to show you all your storage locations (like Garage
 ---
 
 ### Find Items in a Location
+
 **Ask Claude:**
+
 > "What items do I have in the garage?"
 
 **What happens:**
 Claude will:
+
 1. First use `list_locations` to find the garage's ID
 2. Then use `get_items_by_location` to show all items stored there
 
 ---
 
 **Ask Claude:**
+
 > "Show me everything in my basement storage"
 
 **What happens:**
@@ -58,7 +67,9 @@ Same process - Claude finds the location and lists all items there
 ## Working with Labels
 
 ### List All Labels
+
 **Ask Claude:**
+
 > "What labels am I using in Homebox?"
 
 or
@@ -71,17 +82,21 @@ Claude uses `list_labels` to show all your labels/categories
 ---
 
 ### Find Items by Label
+
 **Ask Claude:**
+
 > "Show me all items tagged as 'Electronics'"
 
 **What happens:**
 Claude will:
+
 1. Use `list_labels` to find the Electronics label ID
 2. Use `get_items_by_label` to show all electronics
 
 ---
 
 **Ask Claude:**
+
 > "What do I have that's labeled 'Important Documents'?"
 
 **What happens:**
@@ -92,11 +107,14 @@ Same process for finding items with that label
 ## Getting Detailed Information
 
 ### Item Details
+
 **Ask Claude:**
+
 > "Can you get the full details for item ID abc-123-def?"
 
 **What happens:**
 Claude uses `get_item` to show complete information including:
+
 - Name and description
 - Location
 - Labels
@@ -110,11 +128,14 @@ Claude uses `get_item` to show complete information including:
 ## Complex Queries
 
 ### Multi-step Questions
+
 **Ask Claude:**
+
 > "What's the most expensive item in my garage?"
 
 **What happens:**
 Claude will:
+
 1. Find the garage location
 2. Get all items in the garage
 3. Analyze the purchase prices
@@ -123,10 +144,12 @@ Claude will:
 ---
 
 **Ask Claude:**
+
 > "How many electronics do I have and where are they located?"
 
 **What happens:**
 Claude will:
+
 1. Find items labeled "Electronics"
 2. Count them
 3. Show you the locations for each
@@ -134,10 +157,12 @@ Claude will:
 ---
 
 **Ask Claude:**
+
 > "Do I have a warranty for my lawn mower?"
 
 **What happens:**
 Claude will:
+
 1. Search for "lawn mower"
 2. Get the item details
 3. Check the warranty information
@@ -148,7 +173,9 @@ Claude will:
 ## Inventory Management
 
 ### Finding Duplicates
+
 **Ask Claude:**
+
 > "Do I have multiple hammers in my inventory?"
 
 **What happens:**
@@ -157,7 +184,9 @@ Claude searches for "hammer" and shows you all matches
 ---
 
 ### Location Organization
+
 **Ask Claude:**
+
 > "What's in my Kitchen versus my Garage?"
 
 **What happens:**
@@ -166,7 +195,9 @@ Claude gets items from both locations and compares them
 ---
 
 ### Maintenance Tracking
+
 **Ask Claude:**
+
 > "Which of my items have warranty information recorded?"
 
 **What happens:**
@@ -177,11 +208,14 @@ Claude can search through items and check their warranty fields
 ## Reporting
 
 ### Summary Information
+
 **Ask Claude:**
+
 > "Give me a summary of my home inventory"
 
 **What happens:**
 Claude will:
+
 1. Get all locations
 2. Get all labels
 3. Possibly sample some items
@@ -190,6 +224,7 @@ Claude will:
 ---
 
 **Ask Claude:**
+
 > "What's the total value of items in my garage?"
 
 **What happens:**
@@ -243,26 +278,33 @@ When Claude retrieves data from Homebox, it can see:
 ## Common Use Cases
 
 ### Moving House
+
 > "List all items in the garage so I can plan what to pack first"
 
 ### Insurance Claims
+
 > "Show me all electronics with their purchase prices and dates"
 
 ### Spring Cleaning
+
 > "What items do I have in storage that I haven't used in over a year?"
 
 ### Shopping
+
 > "Do I already have a ladder? If so, what type?"
 
 ### Maintenance
+
 > "Which appliances have warranty information and when do they expire?"
 
 ### Organization
+
 > "How are my items currently organized by location?"
 
 ## Limitations
 
 The MCP server currently provides **read-only** access to your Homebox inventory. You cannot:
+
 - Add new items
 - Update existing items
 - Delete items
@@ -274,6 +316,7 @@ For making changes, you'll need to use the Homebox web interface directly.
 ## Getting Help
 
 If Claude seems confused or gives an error:
+
 1. Make sure Homebox is running
 2. Check that the MCP server is configured correctly in Claude Desktop
 3. Try restarting Claude Desktop
