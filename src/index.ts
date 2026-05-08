@@ -88,7 +88,9 @@ class HomeboxClient {
       const response = await this.axios.get("/api/v1/items", {
         params: { q: query },
       });
-      return response.data;
+      const data = response.data;
+      if (data?.items) data.items = data.items.map((i: any) => this.normalizeItem(i));
+      return data;
     } catch (error: any) {
       throw new Error(`Failed to search items: ${error.message}`);
     }
@@ -98,7 +100,7 @@ class HomeboxClient {
     await this.ensureAuthenticated();
     try {
       const response = await this.axios.get(`/api/v1/items/${itemId}`);
-      return response.data;
+      return this.normalizeItem(response.data);
     } catch (error: any) {
       throw new Error(`Failed to get item: ${error.message}`);
     }
@@ -148,7 +150,7 @@ class HomeboxClient {
     await this.ensureAuthenticated();
     try {
       const response = await this.axios.get(`/api/v1/locations/${locationId}/items`);
-      return response.data;
+      return (response.data ?? []).map((i: any) => this.normalizeItem(i));
     } catch (error: any) {
       throw new Error(`Failed to get items by location: ${error.message}`);
     }
@@ -158,10 +160,20 @@ class HomeboxClient {
     await this.ensureAuthenticated();
     try {
       const response = await this.axios.get(`${this.tagEndpoint}/${tagId}/items`);
-      return response.data;
+      return (response.data ?? []).map((i: any) => this.normalizeItem(i));
     } catch (error: any) {
       throw new Error(`Failed to get items by tag: ${error.message}`);
     }
+  }
+
+  // Homebox < v0.23.0 returns item.labels; v0.23.0+ returns item.tags.
+  // Normalize to always expose item.tags so callers see a consistent shape.
+  private normalizeItem(item: any): any {
+    if (item && item.labels !== undefined && item.tags === undefined) {
+      const { labels, ...rest } = item;
+      return { ...rest, tags: labels };
+    }
+    return item;
   }
 
   private async ensureAuthenticated(): Promise<void> {
