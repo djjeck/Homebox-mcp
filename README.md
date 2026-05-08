@@ -222,7 +222,9 @@ For more detailed examples and use cases, see [EXAMPLES.md](EXAMPLES.md).
 
 The MCP server provides these tools:
 
-1. **search_items** - Search for items by name or description
+**Read**
+
+1. **search_items** - Search for items by name or description, with optional location/tag filters
 2. **get_item** - Get complete details about a specific item
 3. **list_locations** - List all storage locations
 4. **get_location** - Get details about a specific location
@@ -230,6 +232,21 @@ The MCP server provides these tools:
 6. **get_tag** - Get details about a specific tag
 7. **get_items_by_location** - Get all items in a location
 8. **get_items_by_tag** - Get all items with a tag
+
+**Write**
+
+9. **create_item** - Add a new item to the inventory
+10. **update_item** - Update an existing item (name, description, location, tags, purchase info, warranty, etc.)
+11. **delete_item** - Permanently delete an item
+12. **create_location** - Add a new storage location
+13. **update_location** - Rename a location, change its description, or move it under a parent
+14. **delete_location** - Delete a location
+15. **create_tag** - Add a new tag/category
+16. **update_tag** - Rename a tag, change its description, color, icon, or parent
+17. **delete_tag** - Delete a tag
+18. **create_maintenance_entry** - Record a maintenance event on an item
+19. **update_maintenance_entry** - Update an existing maintenance entry (name, dates, description, cost)
+20. **delete_maintenance_entry** - Delete a maintenance entry
 
 ## Troubleshooting
 

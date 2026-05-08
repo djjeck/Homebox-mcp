@@ -301,18 +301,6 @@ When Claude retrieves data from Homebox, it can see:
 
 > "How are my items currently organized by location?"
 
-## Limitations
-
-The MCP server currently provides **read-only** access to your Homebox inventory. You cannot:
-
-- Add new items
-- Update existing items
-- Delete items
-- Move items between locations
-- Add or remove tags
-
-For making changes, you'll need to use the Homebox web interface directly.
-
 ## Getting Help
 
 If Claude seems confused or gives an error:
