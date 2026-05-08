@@ -265,6 +265,38 @@ const TEST_CASES: TestCase[] = [
       if (!result.name) throw new Error("Expected location to have a name");
     },
   },
+  {
+    name: "get_items_by_location returns array for a valid location",
+    async run({ callTool }) {
+      const locations = await callTool("list_locations", {});
+      if (!Array.isArray(locations) || locations.length === 0) throw new Error("No locations to test with");
+      const result = await callTool("get_items_by_location", { locationId: locations[0].id });
+      if (!Array.isArray(result)) throw new Error(`Expected array, got ${typeof result}`);
+    },
+  },
+  {
+    name: "get_items_by_tag returns array for a valid tag",
+    async run({ callTool }) {
+      const tags = await callTool("list_tags", {});
+      if (!Array.isArray(tags)) throw new Error(`Expected array from list_tags, got ${typeof tags}`);
+      if (tags.length === 0) {
+        console.log("    (no tags seeded — skipping tag filter assertion)");
+        return;
+      }
+      const result = await callTool("get_items_by_tag", { tagId: tags[0].id });
+      if (!Array.isArray(result)) throw new Error(`Expected array, got ${typeof result}`);
+    },
+  },
+  {
+    name: "search_items with locationId filter returns array",
+    async run({ callTool }) {
+      const locations = await callTool("list_locations", {});
+      if (!Array.isArray(locations) || locations.length === 0) throw new Error("No locations to test with");
+      const result = await callTool("search_items", { query: "", locationId: locations[0].id });
+      const items = result?.items ?? result;
+      if (!Array.isArray(items)) throw new Error(`Expected array, got ${typeof items}`);
+    },
+  },
 ];
 
 // ── Main ──────────────────────────────────────────────────────────────────────

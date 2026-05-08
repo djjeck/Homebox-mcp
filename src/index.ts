@@ -34,9 +34,11 @@ class HomeboxClient {
   private axios: AxiosInstance;
   private config: HomeboxConfig;
   private authToken: string | null = null;
-  // Homebox renamed /api/v1/labels to /api/v1/tags in v0.23.0.
-  // Detected at startup via /api/v1/status and set in authenticate().
+  // Homebox renamed /api/v1/labels to /api/v1/tags in v0.23.0, and the
+  // corresponding item filter param from `labels` to `tags` at the same time.
+  // Both are detected at startup via /api/v1/status and set in authenticate().
   private tagEndpoint: string = "/api/v1/tags";
+  private tagFilterParam: string = "tags";
 
   constructor(config: HomeboxConfig) {
     this.config = config;
@@ -44,6 +46,17 @@ class HomeboxClient {
       baseURL: config.homeboxUrl,
       headers: {
         "Content-Type": "application/json",
+      },
+      // Homebox expects repeated keys for array params (e.g. locations=a&locations=b),
+      // not the axios default bracket notation (locations[0]=a).
+      paramsSerializer: (params) => {
+        const parts: string[] = [];
+        for (const [key, value] of Object.entries(params)) {
+          if (value === undefined || value === null) continue;
+          const values = Array.isArray(value) ? value : [value];
+          for (const v of values) parts.push(`${key}=${encodeURIComponent(v)}`);
+        }
+        return parts.join("&");
       },
     });
   }
@@ -75,18 +88,23 @@ class HomeboxClient {
       // Tags endpoint introduced in v0.23.0
       if (major === 0 && minor < 23) {
         this.tagEndpoint = "/api/v1/labels";
+        this.tagFilterParam = "labels";
       }
-      console.error(`Homebox version: ${version} — using tag endpoint: ${this.tagEndpoint}`);
+      console.error(`Homebox version: ${version} — using tag endpoint: ${this.tagEndpoint}, filter param: ${this.tagFilterParam}`);
     } catch {
       console.error(`Could not detect Homebox version, defaulting to ${this.tagEndpoint}`);
     }
   }
 
-  async searchItems(query: string): Promise<any> {
+  async searchItems(query: string, locationId?: string, tagId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
       const response = await this.axios.get("/api/v1/items", {
-        params: { q: query },
+        params: {
+          q: query,
+          ...(locationId ? { locations: [locationId] } : {}),
+          ...(tagId ? { [this.tagFilterParam]: [tagId] } : {}),
+        },
       });
       const data = response.data;
       if (data?.items) data.items = data.items.map((i: any) => this.normalizeItem(i));
@@ -149,8 +167,8 @@ class HomeboxClient {
   async getItemsByLocation(locationId: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get(`/api/v1/locations/${locationId}/items`);
-      return (response.data ?? []).map((i: any) => this.normalizeItem(i));
+      const response = await this.axios.get("/api/v1/items", { params: { locations: [locationId] } });
+      return (response.data?.items ?? []).map((i: any) => this.normalizeItem(i));
     } catch (error: any) {
       throw new Error(`Failed to get items by location: ${error.message}`);
     }
@@ -159,8 +177,8 @@ class HomeboxClient {
   async getItemsByTag(tagId: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get(`${this.tagEndpoint}/${tagId}/items`);
-      return (response.data ?? []).map((i: any) => this.normalizeItem(i));
+      const response = await this.axios.get("/api/v1/items", { params: { [this.tagFilterParam]: [tagId] } });
+      return (response.data?.items ?? []).map((i: any) => this.normalizeItem(i));
     } catch (error: any) {
       throw new Error(`Failed to get items by tag: ${error.message}`);
     }
@@ -235,13 +253,21 @@ function loadConfig(): HomeboxConfig {
 const TOOLS: Tool[] = [
   {
     name: "search_items",
-    description: "Search for items in your Homebox inventory by name, description, or other fields. Returns a list of matching items with their basic information.",
+    description: "Search for items in your Homebox inventory by name, description, or other fields. Optionally filter by location or tag. Returns a list of matching items with their basic information.",
     inputSchema: {
       type: "object",
       properties: {
         query: {
           type: "string",
           description: "Search query to find items",
+        },
+        locationId: {
+          type: "string",
+          description: "Optional: filter results to items in this location ID",
+        },
+        tagId: {
+          type: "string",
+          description: "Optional: filter results to items with this tag ID",
         },
       },
       required: ["query"],
@@ -396,7 +422,11 @@ async function main() {
 
         switch (name) {
         case "search_items": {
-          const result = await homeboxClient.searchItems(args.query as string);
+          const result = await homeboxClient.searchItems(
+            args.query as string,
+            args.locationId as string | undefined,
+            args.tagId as string | undefined,
+          );
           return {
             content: [
               {
