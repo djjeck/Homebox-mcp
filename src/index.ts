@@ -2,6 +2,7 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -12,6 +13,8 @@ import { readFileSync, existsSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { createRequire } from "module";
+import { createServer, IncomingMessage, ServerResponse } from "http";
+import { randomUUID } from "crypto";
 
 // Get the directory of the current module
 const __filename = fileURLToPath(import.meta.url);
@@ -907,278 +910,164 @@ const TOOLS: Tool[] = [
   },
 ];
 
-// Main server setup
-async function main() {
-  console.error("=".repeat(60));
-  console.error("Homebox MCP Server v" + VERSION);
-  console.error("=".repeat(60));
-  console.error("Node version:", process.version);
-  console.error("Platform:", process.platform);
-  console.error("Build date:", new Date().toISOString());
+function setupHandlers(server: Server, homeboxClient: HomeboxClient): void {
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    console.error("ListTools request received");
+    return { tools: TOOLS };
+  });
 
-  try {
-    console.error("Loading configuration...");
-    const config = loadConfig();
-    console.error("Configuration loaded successfully");
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    console.error("CallTool request received:", request.params.name);
+    const { name, arguments: args } = request.params;
 
-    console.error("Creating Homebox client...");
-    const homeboxClient = new HomeboxClient(config);
-
-    // Test authentication on startup
-    console.error("Attempting authentication with Homebox...");
     try {
-      await homeboxClient.authenticate();
-      console.error("Successfully authenticated with Homebox");
-    } catch (error: any) {
-      console.error("Failed to authenticate with Homebox:", error.message);
-      console.error("Please check your config.json settings");
-      process.exit(1);
-    }
-
-    console.error("Creating MCP Server instance...");
-    const server = new Server(
-      {
-        name: "homebox-mcp-server",
-        version: VERSION,
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
+      if (!args) {
+        throw new Error("Missing arguments");
       }
-    );
-    console.error("MCP Server instance created");
 
-    console.error("Setting up request handlers...");
-    // List available tools
-    server.setRequestHandler(ListToolsRequestSchema, async () => {
-      console.error("ListTools request received");
-      return { tools: TOOLS };
-    });
+      switch (name) {
+      case "search_items": {
+        const result = await homeboxClient.searchItems(
+          args.query as string,
+          args.locationId as string | undefined,
+          args.tagId as string | undefined,
+        );
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-    // Handle tool calls
-    server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      console.error("CallTool request received:", request.params.name);
-      const { name, arguments: args } = request.params;
+      case "get_item": {
+        const result = await homeboxClient.getItem(args.itemId as string);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-      try {
-        if (!args) {
-          throw new Error("Missing arguments");
-        }
+      case "list_locations": {
+        const result = await homeboxClient.listLocations();
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        switch (name) {
-        case "search_items": {
-          const result = await homeboxClient.searchItems(
-            args.query as string,
-            args.locationId as string | undefined,
-            args.tagId as string | undefined,
-          );
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "get_location": {
+        const result = await homeboxClient.getLocation(args.locationId as string);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "get_item": {
-          const result = await homeboxClient.getItem(args.itemId as string);
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "list_tags": {
+        const result = await homeboxClient.listTags();
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "list_locations": {
-          const result = await homeboxClient.listLocations();
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "get_tag": {
+        const result = await homeboxClient.getTag(args.tagId as string);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "get_location": {
-          const result = await homeboxClient.getLocation(args.locationId as string);
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "get_items_by_location": {
+        const result = await homeboxClient.getItemsByLocation(args.locationId as string);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "list_tags": {
-          const result = await homeboxClient.listTags();
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "get_items_by_tag": {
+        const result = await homeboxClient.getItemsByTag(args.tagId as string);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "get_tag": {
-          const result = await homeboxClient.getTag(args.tagId as string);
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "delete_maintenance_entry": {
+        await homeboxClient.deleteMaintenanceEntry(args.entryId as string);
+        return {
+          content: [{ type: "text", text: "Maintenance entry deleted successfully." }],
+        };
+      }
 
-        case "get_items_by_location": {
-          const result = await homeboxClient.getItemsByLocation(args.locationId as string);
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "create_maintenance_entry": {
+        const result = await homeboxClient.createMaintenanceEntry(
+          args.itemId as string,
+          args.name as string,
+          args.completedDate as string | undefined,
+          args.scheduledDate as string | undefined,
+          args.description as string | undefined,
+          args.cost as string | undefined
+        );
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "get_items_by_tag": {
-          const result = await homeboxClient.getItemsByTag(args.tagId as string);
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "update_item": {
+        const { itemId, ...data } = args as { itemId: string; [key: string]: any };
+        const result = await homeboxClient.updateItem(itemId, data);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "delete_maintenance_entry": {
-          await homeboxClient.deleteMaintenanceEntry(args.entryId as string);
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Maintenance entry deleted successfully.",
-              },
-            ],
-          };
-        }
+      case "create_item": {
+        const result = await homeboxClient.createItem(
+          args.name as string,
+          args.locationId as string,
+          args.description as string | undefined,
+          args.tagIds as string[] | undefined,
+          args.parentId as string | undefined
+        );
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "create_maintenance_entry": {
-          const result = await homeboxClient.createMaintenanceEntry(
-            args.itemId as string,
-            args.name as string,
-            args.completedDate as string | undefined,
-            args.scheduledDate as string | undefined,
-            args.description as string | undefined,
-            args.cost as string | undefined
-          );
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "create_tag": {
+        const result = await homeboxClient.createTag(
+          args.name as string,
+          args.description as string | undefined
+        );
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "update_item": {
-          const { itemId, ...data } = args as { itemId: string; [key: string]: any };
-          const result = await homeboxClient.updateItem(itemId, data);
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "create_location": {
+        const result = await homeboxClient.createLocation(
+          args.name as string,
+          args.description as string | undefined
+        );
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
 
-        case "create_item": {
-          const result = await homeboxClient.createItem(
-            args.name as string,
-            args.locationId as string,
-            args.description as string | undefined,
-            args.tagIds as string[] | undefined,
-            args.parentId as string | undefined
-          );
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "delete_item": {
+        await homeboxClient.deleteItem(args.itemId as string);
+        return {
+          content: [{ type: "text", text: "Item deleted successfully." }],
+        };
+      }
 
-        case "create_tag": {
-          const result = await homeboxClient.createTag(
-            args.name as string,
-            args.description as string | undefined
-          );
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
+      case "delete_location": {
+        await homeboxClient.deleteLocation(args.locationId as string);
+        return {
+          content: [{ type: "text", text: "Location deleted successfully." }],
+        };
+      }
 
-        case "create_location": {
-          const result = await homeboxClient.createLocation(
-            args.name as string,
-            args.description as string | undefined
-          );
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(result, null, 2),
-              },
-            ],
-          };
-        }
-
-        case "delete_item": {
-          await homeboxClient.deleteItem(args.itemId as string);
-          return {
-            content: [{ type: "text", text: "Item deleted successfully." }],
-          };
-        }
-
-        case "delete_location": {
-          await homeboxClient.deleteLocation(args.locationId as string);
-          return {
-            content: [{ type: "text", text: "Location deleted successfully." }],
-          };
-        }
-
-        case "delete_tag": {
-          await homeboxClient.deleteTag(args.tagId as string);
-          return {
-            content: [{ type: "text", text: "Tag deleted successfully." }],
-          };
-        }
+      case "delete_tag": {
+        await homeboxClient.deleteTag(args.tagId as string);
+        return {
+          content: [{ type: "text", text: "Tag deleted successfully." }],
+        };
+      }
 
         case "update_location": {
           const result = await homeboxClient.updateLocation(
@@ -1220,32 +1109,170 @@ async function main() {
           };
         }
 
-        default:
-          throw new Error(`Unknown tool: ${name}`);
+      default:
+        throw new Error(`Unknown tool: ${name}`);
       }
     } catch (error: any) {
       return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error.message}`,
-          },
-        ],
+        content: [{ type: "text", text: `Error: ${error.message}` }],
         isError: true,
       };
     }
-    });
+  });
+}
+
+// Main server setup
+async function main() {
+  console.error("=".repeat(60));
+  console.error("Homebox MCP Server v" + VERSION);
+  console.error("=".repeat(60));
+  console.error("Node version:", process.version);
+  console.error("Platform:", process.platform);
+  console.error("Build date:", new Date().toISOString());
+
+  try {
+    console.error("Loading configuration...");
+    const config = loadConfig();
+    console.error("Configuration loaded successfully");
+
+    console.error("Creating Homebox client...");
+    const homeboxClient = new HomeboxClient(config);
+
+    // In stdio mode, verify credentials eagerly so the caller gets immediate feedback.
+    // In HTTP mode, defer auth to the first request — the server may start before
+    // the Homebox user exists (e.g. during e2e test stack bringup).
+    const httpMode = !!process.env.PORT;
+    if (!httpMode) {
+      console.error("Attempting authentication with Homebox...");
+      try {
+        await homeboxClient.authenticate();
+        console.error("Successfully authenticated with Homebox");
+      } catch (error: any) {
+        console.error("Failed to authenticate with Homebox:", error.message);
+        console.error("Please check your config.json settings");
+        process.exit(1);
+      }
+    } else {
+      console.error("HTTP mode: deferring authentication to first request");
+    }
+
+    console.error("Creating MCP Server instance...");
+    const server = new Server(
+      {
+        name: "homebox-mcp-server",
+        version: VERSION,
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      }
+    );
+    console.error("MCP Server instance created");
+
+    console.error("Setting up request handlers...");
+    setupHandlers(server, homeboxClient);
     console.error("Request handlers configured");
 
-    // Start the server
-    console.error("Creating stdio transport...");
-    const transport = new StdioServerTransport();
-    console.error("Stdio transport created");
+    const port = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
 
-    console.error("Connecting server to transport...");
-    await server.connect(transport);
-    console.error("Homebox MCP Server running on stdio");
-    console.error("Server is ready to accept requests");
+    if (port) {
+      // HTTP mode: Streamable HTTP transport (MCP spec 2025-03-26)
+      console.error(`Starting HTTP server on port ${port}...`);
+
+      // One transport instance per session; keyed by session ID for stateful operation.
+      const transports = new Map<string, StreamableHTTPServerTransport>();
+
+      const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+        const url = new URL(req.url ?? "/", `http://localhost:${port}`);
+
+        if (url.pathname === "/health") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "ok", version: VERSION }));
+          return;
+        }
+
+        if (url.pathname === "/mcp") {
+          try {
+            const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+            if (req.method === "POST") {
+              let transport: StreamableHTTPServerTransport;
+
+              // Re-use existing session or create a new one for initialize requests
+              if (sessionId && transports.has(sessionId)) {
+                transport = transports.get(sessionId)!;
+              } else if (!sessionId) {
+                // New session — create a fresh server + transport pair
+                const sessionServer = new Server(
+                  { name: "homebox-mcp-server", version: VERSION },
+                  { capabilities: { tools: {} } }
+                );
+                setupHandlers(sessionServer, homeboxClient);
+
+                transport = new StreamableHTTPServerTransport({
+                  sessionIdGenerator: () => randomUUID(),
+                  onsessioninitialized: (id) => {
+                    transports.set(id, transport);
+                    console.error(`Session initialized: ${id}`);
+                  },
+                  onsessionclosed: (id) => {
+                    transports.delete(id);
+                    console.error(`Session closed: ${id}`);
+                  },
+                });
+
+                await sessionServer.connect(transport);
+              } else {
+                res.writeHead(400, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: "Unknown session ID" }));
+                return;
+              }
+
+              await transport.handleRequest(req, res);
+            } else if (req.method === "GET" || req.method === "DELETE") {
+              if (!sessionId || !transports.has(sessionId)) {
+                res.writeHead(400, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: "Unknown or missing session ID" }));
+                return;
+              }
+              await transports.get(sessionId)!.handleRequest(req, res);
+            } else {
+              res.writeHead(405);
+              res.end();
+            }
+          } catch (err: any) {
+            console.error("MCP request error:", err);
+            if (!res.headersSent) {
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: err.message }));
+            }
+          }
+          return;
+        }
+
+        res.writeHead(404);
+        res.end();
+      });
+
+      httpServer.listen(port, () => {
+        console.error(`Homebox MCP Server running on HTTP port ${port}`);
+        console.error(`  MCP endpoint: http://localhost:${port}/mcp`);
+        console.error(`  Health check: http://localhost:${port}/health`);
+      });
+    } else {
+      // Stdio mode (default — preserves Claude Desktop usage)
+      console.error("Creating stdio transport...");
+      const transport = new StdioServerTransport();
+      console.error("Stdio transport created");
+
+      setupHandlers(server, homeboxClient);
+
+      console.error("Connecting server to transport...");
+      await server.connect(transport);
+      console.error("Homebox MCP Server running on stdio");
+      console.error("Server is ready to accept requests");
+    }
 
   } catch (error: any) {
     console.error("Error in main():", error);

@@ -21,6 +21,15 @@ services:
       - HOMEBOX_URL=http://homebox:7745
       - HOMEBOX_EMAIL=test@homebox-mcp.test
       - HOMEBOX_PASSWORD=TestPassword123!
+      - PORT=8811
+    ports:
+      - "8811:8811"
     depends_on:
       homebox:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8811/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
