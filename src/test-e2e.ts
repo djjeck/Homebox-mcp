@@ -11,9 +11,10 @@
  *   5. docker compose -f docker-compose.test.yml down --volumes on exit
  */
 
-import { spawn, execSync, ChildProcess } from "child_process";
+import { execSync } from "child_process";
 import axios, { AxiosInstance } from "axios";
-import * as readline from "readline";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -24,20 +25,6 @@ const HOMEBOX_URL = "http://localhost:7745";
 const COMPOSE_FILE = "docker-compose.test.yml";
 
 // ── Types ────────────────────────────────────────────────────────────────────
-
-interface McpRequest {
-  jsonrpc: "2.0";
-  id: number;
-  method: string;
-  params: Record<string, any>;
-}
-
-interface McpResponse {
-  jsonrpc: "2.0";
-  id: number;
-  result?: any;
-  error?: { code: number; message: string };
-}
 
 interface TestContext {
   callTool: (name: string, args: Record<string, any>) => Promise<any>;
@@ -58,23 +45,7 @@ function exec(cmd: string): void {
   execSync(cmd, { stdio: "inherit" });
 }
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
-async function waitForHomebox(timeoutMs = 60_000): Promise<AxiosInstance> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const client = axios.create({ baseURL: HOMEBOX_URL, timeout: 3000 });
-      await client.get("/api/v1/status");
-      return client;
-    } catch {
-      await sleep(2000);
-    }
-  }
-  throw new Error("Homebox did not become healthy within timeout");
-}
 
 async function registerTestUser(client: AxiosInstance): Promise<void> {
   try {
@@ -94,61 +65,29 @@ async function registerTestUser(client: AxiosInstance): Promise<void> {
   }
 }
 
-// ── MCP client (stdio over docker compose run) ───────────────────────────────
+// ── MCP client (Streamable HTTP) ─────────────────────────────────────────────
+
+const MCP_URL = "http://localhost:8811/mcp";
 
 class McpClient {
-  private proc: ChildProcess;
-  private rl: readline.Interface;
-  private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
-  private nextId = 1;
+  private client: Client;
+  private transport: StreamableHTTPClientTransport;
 
   constructor() {
-    this.proc = spawn("docker", [
-      "compose", "-f", COMPOSE_FILE,
-      "run", "--rm", "--no-deps",
-      "-e", `HOMEBOX_EMAIL=${TEST_EMAIL}`,
-      "-e", `HOMEBOX_PASSWORD=${TEST_PASSWORD}`,
-      "homebox-mcp",
-      "node", "dist/index.js",
-    ], { stdio: ["pipe", "pipe", "ignore"] });
-
-    this.rl = readline.createInterface({ input: this.proc.stdout! });
-    this.rl.on("line", (line) => {
-      try {
-        const msg: McpResponse = JSON.parse(line);
-        const pending = this.pending.get(msg.id);
-        if (!pending) return;
-        this.pending.delete(msg.id);
-        if (msg.error) {
-          pending.reject(new Error(`MCP error ${msg.error.code}: ${msg.error.message}`));
-        } else {
-          pending.resolve(msg.result);
-        }
-      } catch {
-        // stderr noise or non-JSON line — ignore
-      }
-    });
-
-    this.proc.on("error", (err) => {
-      for (const p of this.pending.values()) p.reject(err);
-      this.pending.clear();
-    });
+    this.transport = new StreamableHTTPClientTransport(new URL(MCP_URL));
+    this.client = new Client({ name: "e2e-test", version: "1" });
   }
 
   async initialize(): Promise<void> {
-    await this.send("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: { name: "e2e-test", version: "1" },
-    });
+    await this.client.connect(this.transport);
   }
 
   async callTool(name: string, args: Record<string, any>): Promise<any> {
-    const result = await this.send("tools/call", { name, arguments: args });
+    const result = await this.client.callTool({ name, arguments: args });
     if (result?.isError) {
-      throw new Error(`Tool error: ${result.content?.[0]?.text ?? "unknown"}`);
+      throw new Error(`Tool error: ${(result.content as any)?.[0]?.text ?? "unknown"}`);
     }
-    const text = result?.content?.[0]?.text;
+    const text = (result.content as any)?.[0]?.text;
     try {
       return JSON.parse(text);
     } catch {
@@ -156,19 +95,8 @@ class McpClient {
     }
   }
 
-  private send(method: string, params: Record<string, any>): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const id = this.nextId++;
-      const req: McpRequest = { jsonrpc: "2.0", id, method, params };
-      this.pending.set(id, { resolve, reject });
-      this.proc.stdin!.write(JSON.stringify(req) + "\n");
-    });
-  }
-
   async close(): Promise<void> {
-    this.rl.close();
-    this.proc.stdin!.end();
-    await new Promise<void>((resolve) => this.proc.on("close", resolve));
+    await this.client.close();
   }
 }
 
@@ -179,7 +107,7 @@ function stackUp(): void {
   // Always tear down first to ensure a clean volume — scoped to this compose file only
   exec(composeCmd("down --volumes --remove-orphans"));
   exec(composeCmd("build homebox-mcp"));
-  exec(composeCmd("up -d --wait homebox"));
+  exec(composeCmd("up -d --wait homebox homebox-mcp"));
 }
 
 function stackDown(): void {
@@ -446,13 +374,11 @@ const TEST_CASES: TestCase[] = [
 
 async function main(): Promise<void> {
   stackUp();
+  // Both services are healthy at this point (stackUp uses --wait with healthchecks).
+  // We still need an httpClient instance to register the test user via Homebox REST API.
+  const httpClient = axios.create({ baseURL: HOMEBOX_URL });
 
-  let httpClient!: AxiosInstance;
   try {
-    console.log("\n⏳ Waiting for Homebox to be ready...");
-    httpClient = await waitForHomebox();
-    console.log("  ✅ Homebox is healthy");
-
     console.log("\n👤 Setting up test user...");
     await registerTestUser(httpClient);
   } catch (error: any) {
@@ -474,13 +400,11 @@ async function main(): Promise<void> {
         await verifyClient.close();
         if (Array.isArray(locations) && locations.length > 0) {
           stackRecreate();
-          httpClient = await waitForHomebox();
           await registerTestUser(httpClient);
           console.log("  ✅ Stack recreated — continuing with remaining tests\n");
         }
       } catch {
         stackRecreate();
-        httpClient = await waitForHomebox();
         await registerTestUser(httpClient);
       }
     }

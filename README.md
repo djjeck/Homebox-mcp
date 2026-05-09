@@ -17,21 +17,26 @@ This MCP server acts as a bridge between AI assistants (like Claude) and your Ho
 
 Choose the integration method that works best for your use case:
 
+### For claude.ai Users (Remote MCP)
+
+- **[Docker / QNAP Container Station](DOCKER.md)** - Run the MCP server as an HTTP service and connect claude.ai to it directly — no local install required
+
+### For Claude Desktop Users (Local MCP)
+
+- **[Docker / QNAP Container Station](DOCKER.md)** - Run MCP server in a container, accessed via `docker exec`
+- **[Native QNAP Installation](QNAP-NATIVE.md)** - Run MCP server directly on QNAP
+- **[Local Installation](#step-by-step-setup-instructions)** - Run MCP server on your computer (see below)
+
 ### For Open WebUI + Ollama Users
 
 - **[Open WebUI Functions](OPEN-WEBUI.md)** - Native integration for Open WebUI with function-calling models (recommended for Ollama)
 - **[Cocktail Examples](COCKTAIL-EXAMPLES.md)** - Specific examples for home bar/cocktail use cases
 
-### For Claude Desktop Users (MCP Protocol)
-
-- **[Docker / QNAP Container Station](DOCKER.md)** - Run MCP server in a container
-- **[Native QNAP Installation](QNAP-NATIVE.md)** - Run MCP server directly on QNAP (recommended for Claude Desktop)
-- **[Local Installation](#step-by-step-setup-instructions)** - Run MCP server on your computer (see below)
-
 **Which should I choose?**
 
+- Using **claude.ai**? → Use [Docker](DOCKER.md) (HTTP mode, port 8811)
+- Using **Claude Desktop**? → Use [Native QNAP Installation](QNAP-NATIVE.md) or [Docker](DOCKER.md) (stdio mode)
 - Using **Ollama with Open WebUI**? → Use [Open WebUI Functions](OPEN-WEBUI.md)
-- Using **Claude Desktop**? → Use [Native QNAP Installation](QNAP-NATIVE.md) or [Docker](DOCKER.md)
 - Running **locally on Windows/Mac/Linux**? → Follow [Local Installation](#step-by-step-setup-instructions) below
 
 ## Prerequisites (Local Installation)
@@ -129,7 +134,8 @@ npm start
 If successful, you should see:
 
 ```
-Starting Homebox MCP Server...
+Homebox MCP Server v1.1.0
+...
 Successfully authenticated with Homebox
 Homebox MCP Server running on stdio
 ```
@@ -222,7 +228,9 @@ For more detailed examples and use cases, see [EXAMPLES.md](EXAMPLES.md).
 
 The MCP server provides these tools:
 
-1. **search_items** - Search for items by name or description
+**Read**
+
+1. **search_items** - Search for items by name or description, with optional location/tag filters
 2. **get_item** - Get complete details about a specific item
 3. **list_locations** - List all storage locations
 4. **get_location** - Get details about a specific location
@@ -230,6 +238,18 @@ The MCP server provides these tools:
 6. **get_tag** - Get details about a specific tag
 7. **get_items_by_location** - Get all items in a location
 8. **get_items_by_tag** - Get all items with a tag
+
+**Write**
+
+9. **create_item** - Add a new item to the inventory
+10. **update_item** - Update an existing item (name, description, location, tags, purchase info, warranty, etc.)
+11. **delete_item** - Permanently delete an item
+12. **create_location** - Add a new storage location
+13. **delete_location** - Delete a location
+14. **create_tag** - Add a new tag/category
+15. **delete_tag** - Delete a tag
+16. **create_maintenance_entry** - Record a maintenance event on an item
+17. **delete_maintenance_entry** - Delete a maintenance entry
 
 ## Troubleshooting
 
