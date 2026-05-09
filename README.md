@@ -17,21 +17,26 @@ This MCP server acts as a bridge between AI assistants (like Claude) and your Ho
 
 Choose the integration method that works best for your use case:
 
+### For claude.ai Users (Remote MCP)
+
+- **[Docker / QNAP Container Station](DOCKER.md)** - Run the MCP server as an HTTP service and connect claude.ai to it directly — no local install required
+
+### For Claude Desktop Users (Local MCP)
+
+- **[Docker / QNAP Container Station](DOCKER.md)** - Run MCP server in a container, accessed via `docker exec`
+- **[Native QNAP Installation](QNAP-NATIVE.md)** - Run MCP server directly on QNAP
+- **[Local Installation](#step-by-step-setup-instructions)** - Run MCP server on your computer (see below)
+
 ### For Open WebUI + Ollama Users
 
 - **[Open WebUI Functions](OPEN-WEBUI.md)** - Native integration for Open WebUI with function-calling models (recommended for Ollama)
 - **[Cocktail Examples](COCKTAIL-EXAMPLES.md)** - Specific examples for home bar/cocktail use cases
 
-### For Claude Desktop Users (MCP Protocol)
-
-- **[Docker / QNAP Container Station](DOCKER.md)** - Run MCP server in a container
-- **[Native QNAP Installation](QNAP-NATIVE.md)** - Run MCP server directly on QNAP (recommended for Claude Desktop)
-- **[Local Installation](#step-by-step-setup-instructions)** - Run MCP server on your computer (see below)
-
 **Which should I choose?**
 
+- Using **claude.ai**? → Use [Docker](DOCKER.md) (HTTP mode, port 8811)
+- Using **Claude Desktop**? → Use [Native QNAP Installation](QNAP-NATIVE.md) or [Docker](DOCKER.md) (stdio mode)
 - Using **Ollama with Open WebUI**? → Use [Open WebUI Functions](OPEN-WEBUI.md)
-- Using **Claude Desktop**? → Use [Native QNAP Installation](QNAP-NATIVE.md) or [Docker](DOCKER.md)
 - Running **locally on Windows/Mac/Linux**? → Follow [Local Installation](#step-by-step-setup-instructions) below
 
 ## Prerequisites (Local Installation)
@@ -129,7 +134,8 @@ npm start
 If successful, you should see:
 
 ```
-Starting Homebox MCP Server...
+Homebox MCP Server v1.1.0
+...
 Successfully authenticated with Homebox
 Homebox MCP Server running on stdio
 ```
