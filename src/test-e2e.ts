@@ -12,6 +12,7 @@
  */
 
 import { execSync } from "child_process";
+import { createServer as createHttpServer, IncomingMessage, ServerResponse, Server as HttpServer } from "http";
 import axios, { AxiosInstance } from "axios";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -36,6 +37,57 @@ interface TestCase {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+// Resolve the hostname by which the MCP container can reach the test-runner process.
+// On macOS/Windows Docker Desktop, host.docker.internal is always available.
+// On Linux, Docker sets the bridge gateway as the host-reachable address.
+function dockerHostname(): string {
+  try {
+    execSync("docker run --rm alpine getent hosts host.docker.internal", { stdio: "pipe" });
+    return "host.docker.internal";
+  } catch {
+    // Fall back to the docker bridge gateway IP
+    try {
+      const gw = execSync(
+        "docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'",
+        { stdio: "pipe" }
+      ).toString().trim();
+      if (gw) return gw;
+    } catch {}
+    return "172.17.0.1";
+  }
+}
+
+interface FileServer {
+  url: string;
+  close: () => void;
+}
+
+// Serve a single static text payload on a random port, reachable from inside Docker.
+function serveText(content: string, filename: string): Promise<FileServer> {
+  return new Promise((resolve, reject) => {
+    const server: HttpServer = createHttpServer((req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      });
+      res.end(content);
+    });
+    server.listen(0, "0.0.0.0", () => {
+      const addr = server.address();
+      if (!addr || typeof addr === "string") {
+        server.close();
+        reject(new Error("Failed to get server address"));
+        return;
+      }
+      const host = dockerHostname();
+      resolve({
+        url: `http://${host}:${addr.port}/${filename}`,
+        close: () => server.close(),
+      });
+    });
+  });
+}
 
 function composeCmd(args: string): string {
   return `docker compose -f ${COMPOSE_FILE} ${args}`;
@@ -366,6 +418,77 @@ const TEST_CASES: TestCase[] = [
       await callTool("delete_tag", { tagId: tagB.id });
       await callTool("delete_location", { locationId: locA.id });
       await callTool("delete_location", { locationId: locB.id });
+    },
+  },
+  {
+    name: "attachments: upload, get proxy URL and verify content, update metadata, then delete",
+    async run({ callTool }) {
+      const ATTACHMENT_CONTENT = "Hello from e2e attachment test!\n";
+      const ATTACHMENT_FILENAME = "e2e-test.txt";
+
+      const location = await callTool("create_location", { name: "Attachment Test Location" });
+      const item = await callTool("create_item", { name: "Attachment Test Item", locationId: location.id });
+
+      // Serve the text file from the test runner so the MCP container can fetch it
+      const fileServer = await serveText(ATTACHMENT_CONTENT, ATTACHMENT_FILENAME);
+      let uploadResult: any;
+      try {
+        uploadResult = await callTool("upload_item_attachment", {
+          itemId: item.id,
+          url: fileServer.url,
+          name: ATTACHMENT_FILENAME,
+          type: "attachment",
+        });
+      } finally {
+        fileServer.close();
+      }
+
+      // upload returns full item — find the new attachment
+      const attachments: any[] = uploadResult?.attachments ?? [];
+      const att = attachments.find((a: any) => a.title === ATTACHMENT_FILENAME);
+      if (!att) throw new Error(`Uploaded attachment '${ATTACHMENT_FILENAME}' not found in item response`);
+      if (!att.id) throw new Error("Attachment missing id");
+
+      // get_item_attachment: should return a proxy URL
+      const urlResult = await callTool("get_item_attachment", {
+        itemId: item.id,
+        attachmentId: att.id,
+        title: ATTACHMENT_FILENAME,
+      });
+      if (!urlResult?.url) throw new Error("get_item_attachment did not return a url");
+
+      // Fetch the proxy URL and verify the content
+      const proxyResponse = await axios.get(urlResult.url, { responseType: "text" });
+      if (proxyResponse.status !== 200) throw new Error(`Proxy URL returned HTTP ${proxyResponse.status}`);
+      if (proxyResponse.data !== ATTACHMENT_CONTENT)
+        throw new Error(`Attachment content mismatch: expected ${JSON.stringify(ATTACHMENT_CONTENT)}, got ${JSON.stringify(proxyResponse.data)}`);
+
+      // update_item_attachment: rename and change type
+      const updated = await callTool("update_item_attachment", {
+        itemId: item.id,
+        attachmentId: att.id,
+        title: "e2e-test-renamed.txt",
+        type: "receipt",
+      });
+      const updatedAtts: any[] = updated?.attachments ?? [];
+      const renamedAtt = updatedAtts.find((a: any) => a.id === att.id);
+      if (!renamedAtt) throw new Error("Attachment not found after update");
+      if (renamedAtt.title !== "e2e-test-renamed.txt")
+        throw new Error(`Expected renamed title, got '${renamedAtt.title}'`);
+      if (renamedAtt.type !== "receipt")
+        throw new Error(`Expected type 'receipt', got '${renamedAtt.type}'`);
+
+      // delete_item_attachment
+      await callTool("delete_item_attachment", { itemId: item.id, attachmentId: att.id });
+
+      const afterDelete = await callTool("get_item", { itemId: item.id });
+      const remainingAtts: any[] = afterDelete?.attachments ?? [];
+      if (remainingAtts.find((a: any) => a.id === att.id))
+        throw new Error("Attachment still present after delete");
+
+      // Cleanup
+      await callTool("delete_item", { itemId: item.id });
+      await callTool("delete_location", { locationId: location.id });
     },
   },
 ];

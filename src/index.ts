@@ -304,6 +304,96 @@ class HomeboxClient {
     }
   }
 
+  async proxyAttachment(itemId: string, attachmentId: string): Promise<{ body: ReadableStream | null; contentType: string; contentDisposition: string }> {
+    await this.ensureAuthenticated();
+    const token = this.authToken!;
+    const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+    const url = `${this.config.homeboxUrl}/api/v1/items/${itemId}/attachments/${attachmentId}`;
+    const response = await fetch(url, { headers: { Authorization: authHeader } });
+    if (!response.ok) {
+      throw new Error(`Homebox returned ${response.status} ${response.statusText}`);
+    }
+    return {
+      body: response.body,
+      contentType: response.headers.get("content-type") ?? "application/octet-stream",
+      contentDisposition: response.headers.get("content-disposition") ?? "attachment",
+    };
+  }
+
+  async deleteItemAttachment(itemId: string, attachmentId: string): Promise<void> {
+    await this.ensureAuthenticated();
+    try {
+      await this.axios.delete(`/api/v1/items/${itemId}/attachments/${attachmentId}`);
+    } catch (error: any) {
+      throw new Error(`Failed to delete attachment: ${error.message}`);
+    }
+  }
+
+  async updateItemAttachment(
+    itemId: string,
+    attachmentId: string,
+    title?: string,
+    type?: string,
+    primary?: boolean
+  ): Promise<any> {
+    await this.ensureAuthenticated();
+    try {
+      const response = await this.axios.put(
+        `/api/v1/items/${itemId}/attachments/${attachmentId}`,
+        { title, type, primary }
+      );
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to update attachment: ${error.message}`);
+    }
+  }
+
+  async uploadItemAttachment(
+    itemId: string,
+    url: string,
+    name?: string,
+    type?: string
+  ): Promise<any> {
+    await this.ensureAuthenticated();
+
+    // Fetch the file from the given URL
+    let fileArrayBuffer: ArrayBuffer;
+    let contentType: string;
+    let filename: string;
+    try {
+      const fetchResponse = await fetch(url);
+      if (!fetchResponse.ok) {
+        throw new Error(`HTTP ${fetchResponse.status} ${fetchResponse.statusText}`);
+      }
+      contentType = fetchResponse.headers.get("content-type") ?? "application/octet-stream";
+      // Strip parameters (e.g. "application/pdf; charset=utf-8" → "application/pdf")
+      contentType = contentType.split(";")[0].trim();
+      fileArrayBuffer = await fetchResponse.arrayBuffer();
+      // Derive filename from URL path if not provided
+      const urlPath = new URL(url).pathname;
+      filename = name ?? urlPath.split("/").filter(Boolean).pop() ?? "attachment";
+    } catch (error: any) {
+      throw new Error(`Failed to fetch attachment from URL: ${error.message}`);
+    }
+
+    try {
+      const form = new FormData();
+      const blob = new Blob([fileArrayBuffer], { type: contentType });
+      form.append("file", blob, filename);
+      form.append("name", name ?? filename);
+      if (type) form.append("type", type);
+
+      const response = await this.axios.post(
+        `/api/v1/items/${itemId}/attachments`,
+        form,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      return response.data;
+    } catch (error: any) {
+      throw new Error(`Failed to upload attachment: ${error.message}`);
+    }
+  }
+
   // Homebox < v0.23.0 returns item.labels; v0.23.0+ returns item.tags.
   // Normalize to always expose item.tags so callers see a consistent shape.
   private normalizeItem(item: any): any {
@@ -319,6 +409,17 @@ class HomeboxClient {
       await this.authenticate();
     }
   }
+}
+
+// Base URL used to construct attachment proxy URLs returned by get_item_attachment.
+// Set ATTACHMENT_BASE_URL to the public URL that routes to this server's /items/… path.
+// This is independent of the MCP endpoint URL — use a separate path or hostname so your
+// reverse proxy can route attachment traffic without conflicting with /mcp traffic.
+// Example: ATTACHMENT_BASE_URL=https://example.com/homebox-mcp-attachments
+// Falls back to http://localhost:{PORT} if unset (only useful for same-host clients).
+function getAttachmentBaseUrl(port: number): string {
+  const base = process.env.ATTACHMENT_BASE_URL?.replace(/\/$/, "");
+  return base ?? `http://localhost:${port}`;
 }
 
 // Load configuration from multiple sources
@@ -758,9 +859,107 @@ const TOOLS: Tool[] = [
       required: ["tagId"],
     },
   },
+  {
+    name: "get_item_attachment",
+    description: "Get a URL for downloading an attachment from a Homebox item. The URL is served by this MCP server as an authenticated proxy — no Homebox credentials are needed to fetch it. Only available in HTTP mode (PORT must be set). The attachment ID and title are found in the item's attachments array returned by get_item.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: {
+          type: "string",
+          description: "ID of the item the attachment belongs to",
+        },
+        attachmentId: {
+          type: "string",
+          description: "ID of the attachment",
+        },
+        title: {
+          type: "string",
+          description: "Filename for the attachment (from the title field in the attachments array). Used to make the URL human-readable.",
+        },
+      },
+      required: ["itemId", "attachmentId", "title"],
+    },
+  },
+  {
+    name: "delete_item_attachment",
+    description: "Permanently delete an attachment from an item by attachment ID. The attachment ID is found in the item's attachments array (get_item returns it). This cannot be undone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: {
+          type: "string",
+          description: "ID of the item the attachment belongs to",
+        },
+        attachmentId: {
+          type: "string",
+          description: "ID of the attachment to delete",
+        },
+      },
+      required: ["itemId", "attachmentId"],
+    },
+  },
+  {
+    name: "update_item_attachment",
+    description: "Update the metadata of an existing attachment (title, type, or primary flag). Returns the updated item JSON. The attachment ID is found in the item's attachments array.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: {
+          type: "string",
+          description: "ID of the item the attachment belongs to",
+        },
+        attachmentId: {
+          type: "string",
+          description: "ID of the attachment to update",
+        },
+        title: {
+          type: "string",
+          description: "New display name for the attachment",
+        },
+        type: {
+          type: "string",
+          enum: ["photo", "manual", "warranty", "attachment", "receipt", "thumbnail"],
+          description: "New attachment type",
+        },
+        primary: {
+          type: "boolean",
+          description: "Whether this attachment is the primary photo for the item",
+        },
+      },
+      required: ["itemId", "attachmentId"],
+    },
+  },
+  {
+    name: "upload_item_attachment",
+    description: "Fetch a file from a URL and upload it as an attachment to an existing Homebox item. The file is fetched server-side, so the URL must be reachable from the MCP server. Returns the updated item JSON.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: {
+          type: "string",
+          description: "ID of the item to attach the file to",
+        },
+        url: {
+          type: "string",
+          description: "URL to fetch the file from. Must be accessible from the MCP server.",
+        },
+        name: {
+          type: "string",
+          description: "Display name for the attachment. Defaults to the filename from the URL.",
+        },
+        type: {
+          type: "string",
+          enum: ["photo", "manual", "warranty", "attachment", "receipt", "thumbnail"],
+          description: "Attachment type. Defaults to 'attachment' if omitted.",
+        },
+      },
+      required: ["itemId", "url"],
+    },
+  },
 ];
 
-function setupHandlers(server: Server, homeboxClient: HomeboxClient): void {
+function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentBaseUrl?: string): void {
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     console.error("ListTools request received");
     return { tools: TOOLS };
@@ -919,6 +1118,54 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient): void {
         };
       }
 
+      case "get_item_attachment": {
+        if (!attachmentBaseUrl) {
+          throw new Error("get_item_attachment is only available in HTTP mode (PORT must be set)");
+        }
+        const itemId = args.itemId as string;
+        const attachmentId = args.attachmentId as string;
+        const title = encodeURIComponent(args.title as string);
+        const url = `${attachmentBaseUrl}/items/${itemId}/attachments/${attachmentId}/${title}`;
+        return {
+          content: [{ type: "text", text: JSON.stringify({ url }, null, 2) }],
+        };
+      }
+
+      case "delete_item_attachment": {
+        await homeboxClient.deleteItemAttachment(
+          args.itemId as string,
+          args.attachmentId as string
+        );
+        return {
+          content: [{ type: "text", text: "Attachment deleted successfully." }],
+        };
+      }
+
+      case "update_item_attachment": {
+        const result = await homeboxClient.updateItemAttachment(
+          args.itemId as string,
+          args.attachmentId as string,
+          args.title as string | undefined,
+          args.type as string | undefined,
+          args.primary as boolean | undefined
+        );
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "upload_item_attachment": {
+        const result = await homeboxClient.uploadItemAttachment(
+          args.itemId as string,
+          args.url as string,
+          args.name as string | undefined,
+          args.type as string | undefined
+        );
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
       }
@@ -980,15 +1227,17 @@ async function main() {
     );
     console.error("MCP Server instance created");
 
-    console.error("Setting up request handlers...");
-    setupHandlers(server, homeboxClient);
-    console.error("Request handlers configured");
-
     const port = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
+    const attachmentBaseUrl = port ? getAttachmentBaseUrl(port) : undefined;
+
+    console.error("Setting up request handlers...");
+    setupHandlers(server, homeboxClient, attachmentBaseUrl);
+    console.error("Request handlers configured");
 
     if (port) {
       // HTTP mode: Streamable HTTP transport (MCP spec 2025-03-26)
       console.error(`Starting HTTP server on port ${port}...`);
+      console.error(`  MCP base URL: ${attachmentBaseUrl}`);
 
       // One transport instance per session; keyed by session ID for stateful operation.
       const transports = new Map<string, StreamableHTTPServerTransport>();
@@ -1018,7 +1267,7 @@ async function main() {
                   { name: "homebox-mcp-server", version: VERSION },
                   { capabilities: { tools: {} } }
                 );
-                setupHandlers(sessionServer, homeboxClient);
+                setupHandlers(sessionServer, homeboxClient, attachmentBaseUrl);
 
                 transport = new StreamableHTTPServerTransport({
                   sessionIdGenerator: () => randomUUID(),
@@ -1055,6 +1304,38 @@ async function main() {
             console.error("MCP request error:", err);
             if (!res.headersSent) {
               res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: err.message }));
+            }
+          }
+          return;
+        }
+
+        // Attachment proxy: /attachments/:itemId/:attachmentId/:filename
+        const attachmentMatch = url.pathname.match(/^\/items\/([^/]+)\/attachments\/([^/]+)\/([^/]+)$/);
+        if (attachmentMatch && req.method === "GET") {
+          const [, itemId, attachmentId] = attachmentMatch;
+          try {
+            const { body, contentType, contentDisposition } = await homeboxClient.proxyAttachment(itemId, attachmentId);
+            res.writeHead(200, {
+              "Content-Type": contentType,
+              "Content-Disposition": contentDisposition,
+            });
+            if (body) {
+              const reader = body.getReader();
+              const pump = async () => {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  res.write(value);
+                }
+              };
+              await pump();
+            }
+            res.end();
+          } catch (err: any) {
+            console.error("Attachment proxy error:", err);
+            if (!res.headersSent) {
+              res.writeHead(502, { "Content-Type": "application/json" });
               res.end(JSON.stringify({ error: err.message }));
             }
           }
