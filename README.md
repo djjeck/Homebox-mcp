@@ -10,8 +10,10 @@ This MCP server acts as a bridge between AI assistants (like Claude) and your Ho
 - Get detailed information about specific items
 - List all locations where you store things
 - List all tags/categories you use
-- Find all items in a specific location
-- Find all items with a specific tag
+- Find all items in a specific location or tag
+- Create, update, and delete items, locations, and tags
+- Record and delete maintenance entries
+- Upload, download, update, and delete item attachments
 
 ## Deployment Options
 
@@ -253,6 +255,13 @@ The MCP server provides these tools:
 18. **create_maintenance_entry** - Record a maintenance event on an item
 19. **update_maintenance_entry** - Update an existing maintenance entry (name, dates, description, cost)
 20. **delete_maintenance_entry** - Delete a maintenance entry
+
+**Attachments**
+
+18. **get_item_attachment** - Get download access to an attachment. Returns an HTTP proxy URL (for cross-MCP transfer: pass to another MCP's upload tool) and a `resource_link` (for reading content via `resources/read` without HTTP fetch restrictions). HTTP mode only; requires `ATTACHMENT_BASE_URL`.
+19. **upload_item_attachment** - Fetch a file from a URL and attach it to an item
+20. **update_item_attachment** - Update attachment metadata (title, type, primary flag)
+21. **delete_item_attachment** - Permanently delete an attachment
 
 ## Troubleshooting
 
