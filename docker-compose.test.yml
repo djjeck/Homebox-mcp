@@ -22,6 +22,7 @@ services:
       - HOMEBOX_EMAIL=test@homebox-mcp.test
       - HOMEBOX_PASSWORD=TestPassword123!
       - PORT=8811
+      - ATTACHMENT_BASE_URL=http://localhost:8811
     ports:
       - "8811:8811"
     depends_on:

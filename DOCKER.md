@@ -290,7 +290,40 @@ environment:
   - HOMEBOX_URL=http://homebox:7745
   - HOMEBOX_EMAIL=your-email@example.com
   - HOMEBOX_PASSWORD=your-password
+  - PORT=8811
+  # Optional — required for get_item_attachment (attachment proxy URLs):
+  - ATTACHMENT_BASE_URL=https://your-host-or-tunnel-url/homebox-mcp-attachments
 ```
+
+#### `ATTACHMENT_BASE_URL`
+
+The attachment proxy (`/items/…`) and the MCP protocol endpoint (`/mcp`) are served on different paths. Behind a reverse proxy you will typically want to route them independently — use a dedicated path or subdomain for attachments so each `location` block is unambiguous.
+
+| Deployment           | `ATTACHMENT_BASE_URL`                                | MCP client URL                               |
+| -------------------- | ---------------------------------------------------- | -------------------------------------------- |
+| Direct (no proxy)    | `http://192.168.1.10:8811`                           | `http://192.168.1.10:8811/mcp`               |
+| Behind reverse proxy | `https://myhost.example.com/homebox-mcp-attachments` | `https://myhost.example.com/homebox-mcp/mcp` |
+
+Example nginx config for the reverse-proxy case:
+
+```nginx
+# MCP protocol traffic
+location /homebox-mcp {
+    proxy_pass http://127.0.0.1:8811/mcp;
+}
+
+# Attachment proxy traffic — trailing slash strips the prefix before forwarding
+location /homebox-mcp-attachments/ {
+    proxy_pass http://127.0.0.1:8811/;
+}
+```
+
+When set, `get_item_attachment` returns two content items for each attachment:
+
+- An **HTTP proxy URL** at `{ATTACHMENT_BASE_URL}/items/{itemId}/attachments/{attachmentId}/{filename}` — pass this to another MCP's upload tool for cross-MCP file transfer; the receiving MCP fetches the file server-side.
+- A **`resource_link`** with the same URI — use this with `resources/read` to read the file content through the MCP protocol, which avoids HTTP fetch restrictions on platforms like claude.ai.
+
+The MCP server proxies both paths to Homebox using its own credentials, so no Homebox auth is required on the client side. If `ATTACHMENT_BASE_URL` is not set, it falls back to `http://localhost:{PORT}`, which only works for clients on the same host.
 
 ### 2. Mounted Config File
 

@@ -12,6 +12,7 @@
  */
 
 import { execSync } from "child_process";
+import { createServer as createHttpServer, IncomingMessage, ServerResponse, Server as HttpServer } from "http";
 import axios, { AxiosInstance } from "axios";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -28,6 +29,8 @@ const COMPOSE_FILE = "docker-compose.test.yml";
 
 interface TestContext {
   callTool: (name: string, args: Record<string, any>) => Promise<any>;
+  callToolRaw: (name: string, args: Record<string, any>) => Promise<any>;
+  readResource: (uri: string) => Promise<any>;
 }
 
 interface TestCase {
@@ -36,6 +39,57 @@ interface TestCase {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+// Resolve the hostname by which the MCP container can reach the test-runner process.
+// On macOS/Windows Docker Desktop, host.docker.internal is always available.
+// On Linux, Docker sets the bridge gateway as the host-reachable address.
+function dockerHostname(): string {
+  try {
+    execSync("docker run --rm alpine getent hosts host.docker.internal", { stdio: "pipe" });
+    return "host.docker.internal";
+  } catch {
+    // Fall back to the docker bridge gateway IP
+    try {
+      const gw = execSync(
+        "docker network inspect bridge --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'",
+        { stdio: "pipe" }
+      ).toString().trim();
+      if (gw) return gw;
+    } catch {}
+    return "172.17.0.1";
+  }
+}
+
+interface FileServer {
+  url: string;
+  close: () => void;
+}
+
+// Serve a single static text payload on a random port, reachable from inside Docker.
+function serveText(content: string, filename: string): Promise<FileServer> {
+  return new Promise((resolve, reject) => {
+    const server: HttpServer = createHttpServer((req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      });
+      res.end(content);
+    });
+    server.listen(0, "0.0.0.0", () => {
+      const addr = server.address();
+      if (!addr || typeof addr === "string") {
+        server.close();
+        reject(new Error("Failed to get server address"));
+        return;
+      }
+      const host = dockerHostname();
+      resolve({
+        url: `http://${host}:${addr.port}/${filename}`,
+        close: () => server.close(),
+      });
+    });
+  });
+}
 
 function composeCmd(args: string): string {
   return `docker compose -f ${COMPOSE_FILE} ${args}`;
@@ -95,6 +149,19 @@ class McpClient {
     }
   }
 
+  async callToolRaw(name: string, args: Record<string, any>): Promise<any> {
+    const result = await this.client.callTool({ name, arguments: args });
+    if (result?.isError) {
+      throw new Error(`Tool error: ${(result.content as any)?.[0]?.text ?? "unknown"}`);
+    }
+    return result.content;
+  }
+
+  async readResource(uri: string): Promise<any> {
+    const result = await this.client.readResource({ uri });
+    return result.contents;
+  }
+
   async close(): Promise<void> {
     await this.client.close();
   }
@@ -135,7 +202,11 @@ async function runTestCase(tc: TestCase): Promise<boolean> {
   const client = new McpClient();
   try {
     await client.initialize();
-    await tc.run({ callTool: (n, a) => client.callTool(n, a) });
+    await tc.run({
+      callTool: (n, a) => client.callTool(n, a),
+      callToolRaw: (n, a) => client.callToolRaw(n, a),
+      readResource: (uri) => client.readResource(uri),
+    });
     await client.close();
     console.log("✅");
     passed++;
@@ -366,6 +437,102 @@ const TEST_CASES: TestCase[] = [
       await callTool("delete_tag", { tagId: tagB.id });
       await callTool("delete_location", { locationId: locA.id });
       await callTool("delete_location", { locationId: locB.id });
+    },
+  },
+  {
+    name: "attachments: upload, get proxy URL and verify content, update metadata, then delete",
+    async run({ callTool, callToolRaw, readResource }) {
+      const ATTACHMENT_CONTENT = "Hello from e2e attachment test!\n";
+      const ATTACHMENT_FILENAME = "e2e-test.txt";
+
+      const location = await callTool("create_location", { name: "Attachment Test Location" });
+      const item = await callTool("create_item", { name: "Attachment Test Item", locationId: location.id });
+
+      // Serve the text file from the test runner so the MCP container can fetch it
+      const fileServer = await serveText(ATTACHMENT_CONTENT, ATTACHMENT_FILENAME);
+      let uploadResult: any;
+      try {
+        uploadResult = await callTool("upload_item_attachment", {
+          itemId: item.id,
+          url: fileServer.url,
+          name: ATTACHMENT_FILENAME,
+          type: "attachment",
+        });
+      } finally {
+        fileServer.close();
+      }
+
+      // upload returns full item — find the new attachment
+      const attachments: any[] = uploadResult?.attachments ?? [];
+      const att = attachments.find((a: any) => a.title === ATTACHMENT_FILENAME);
+      if (!att) throw new Error(`Uploaded attachment '${ATTACHMENT_FILENAME}' not found in item response`);
+      if (!att.id) throw new Error("Attachment missing id");
+
+      // get_item_attachment: should return both a text/url content item and a resource_link
+      const rawContent = await callToolRaw("get_item_attachment", {
+        itemId: item.id,
+        attachmentId: att.id,
+        title: ATTACHMENT_FILENAME,
+        mimeType: att.mimeType,
+      });
+
+      // 1. HTTP URL present in the text content item
+      const textItem = (rawContent as any[]).find((c: any) => c.type === "text");
+      if (!textItem) throw new Error("get_item_attachment: missing text content item");
+      const urlResult = JSON.parse(textItem.text);
+      if (!urlResult?.url) throw new Error("get_item_attachment: text item missing url field");
+      const expectedUrlPrefix = `http://localhost:8811/items/${item.id}/attachments/${att.id}/`;
+      if (!urlResult.url.startsWith(expectedUrlPrefix))
+        throw new Error(`get_item_attachment: unexpected url '${urlResult.url}'`);
+
+      // 2. resource_link present with matching URI
+      const resourceLink = (rawContent as any[]).find((c: any) => c.type === "resource_link");
+      if (!resourceLink) throw new Error("get_item_attachment: missing resource_link content item");
+      if (resourceLink.uri !== urlResult.url)
+        throw new Error(`get_item_attachment: resource_link uri '${resourceLink.uri}' does not match url '${urlResult.url}'`);
+
+      // 3. Content via HTTP URL
+      const proxyResponse = await axios.get(urlResult.url, { responseType: "text" });
+      if (proxyResponse.status !== 200) throw new Error(`Proxy URL returned HTTP ${proxyResponse.status}`);
+      if (proxyResponse.data !== ATTACHMENT_CONTENT)
+        throw new Error(`HTTP content mismatch: expected ${JSON.stringify(ATTACHMENT_CONTENT)}, got ${JSON.stringify(proxyResponse.data)}`);
+
+      // 4. Content via resources/read (MCP resource protocol)
+      const resourceContents = await readResource(resourceLink.uri);
+      const resourceItem = (resourceContents as any[])?.[0];
+      if (!resourceItem) throw new Error("resources/read: empty contents");
+      const resourceText = resourceItem.text ?? (resourceItem.blob
+        ? Buffer.from(resourceItem.blob, "base64").toString("utf-8")
+        : undefined);
+      if (resourceText !== ATTACHMENT_CONTENT)
+        throw new Error(`resources/read content mismatch: expected ${JSON.stringify(ATTACHMENT_CONTENT)}, got ${JSON.stringify(resourceText)}`);
+
+      // update_item_attachment: rename and change type
+      const updated = await callTool("update_item_attachment", {
+        itemId: item.id,
+        attachmentId: att.id,
+        title: "e2e-test-renamed.txt",
+        type: "receipt",
+      });
+      const updatedAtts: any[] = updated?.attachments ?? [];
+      const renamedAtt = updatedAtts.find((a: any) => a.id === att.id);
+      if (!renamedAtt) throw new Error("Attachment not found after update");
+      if (renamedAtt.title !== "e2e-test-renamed.txt")
+        throw new Error(`Expected renamed title, got '${renamedAtt.title}'`);
+      if (renamedAtt.type !== "receipt")
+        throw new Error(`Expected type 'receipt', got '${renamedAtt.type}'`);
+
+      // delete_item_attachment
+      await callTool("delete_item_attachment", { itemId: item.id, attachmentId: att.id });
+
+      const afterDelete = await callTool("get_item", { itemId: item.id });
+      const remainingAtts: any[] = afterDelete?.attachments ?? [];
+      if (remainingAtts.find((a: any) => a.id === att.id))
+        throw new Error("Attachment still present after delete");
+
+      // Cleanup
+      await callTool("delete_item", { itemId: item.id });
+      await callTool("delete_location", { locationId: location.id });
     },
   },
 ];
