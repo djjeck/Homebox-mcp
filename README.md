@@ -224,22 +224,32 @@ Once configured, you can ask Claude to interact with your Homebox inventory. Her
 
 "Show me all items tagged as 'Electronics'"
 
+### Work with Multiple Collections
+
+"What collections do I have in Homebox?"
+
+"Search for 'ladder' in my Tools collection"
+
 For more detailed examples and use cases, see [EXAMPLES.md](EXAMPLES.md).
 
 ## Available Tools
 
 The MCP server provides these tools:
 
+**Collections**
+
+1. **list_collections** - List all collections (groups) this account belongs to, with each collection's ID, name, currency, and whether it is the default
+
 **Read**
 
-1. **search_items** - Search for items by name or description, with optional location/tag filters
-2. **get_item** - Get complete details about a specific item
-3. **list_locations** - List all storage locations
-4. **get_location** - Get details about a specific location
-5. **list_tags** - List all tags/categories
-6. **get_tag** - Get details about a specific tag
-7. **get_items_by_location** - Get all items in a location
-8. **get_items_by_tag** - Get all items with a tag
+2. **search_items** - Search for items by name or description, with optional location/tag filters
+3. **get_item** - Get complete details about a specific item
+4. **list_locations** - List all storage locations
+5. **get_location** - Get details about a specific location
+6. **list_tags** - List all tags/categories
+7. **get_tag** - Get details about a specific tag
+8. **get_items_by_location** - Get all items in a location
+9. **get_items_by_tag** - Get all items with a tag
 
 **Write**
 
@@ -258,10 +268,40 @@ The MCP server provides these tools:
 
 **Attachments**
 
-18. **get_item_attachment** - Get download access to an attachment. Returns an HTTP proxy URL (for cross-MCP transfer: pass to another MCP's upload tool) and a `resource_link` (for reading content via `resources/read` without HTTP fetch restrictions). HTTP mode only; requires `ATTACHMENT_BASE_URL`.
-19. **upload_item_attachment** - Fetch a file from a URL and attach it to an item
-20. **update_item_attachment** - Update attachment metadata (title, type, primary flag)
-21. **delete_item_attachment** - Permanently delete an attachment
+19. **get_item_attachment** - Get download access to an attachment. Returns an HTTP proxy URL (for cross-MCP transfer: pass to another MCP's upload tool) and a `resource_link` (for reading content via `resources/read` without HTTP fetch restrictions). HTTP mode only; requires `ATTACHMENT_BASE_URL`.
+20. **upload_item_attachment** - Fetch a file from a URL and attach it to an item
+21. **update_item_attachment** - Update attachment metadata (title, type, primary flag)
+22. **delete_item_attachment** - Permanently delete an attachment
+
+All inventory tools (everything except `list_collections`) accept an optional **`collection`** parameter — a collection name or ID. When omitted, the account's default collection is used. See [Working with Collections](#working-with-collections) below.
+
+## Working with Collections
+
+Homebox supports multiple independent collections (called "groups" in the API). Each collection has its own items, locations, and tags — nothing is shared between them. If your account belongs to more than one collection, you can target any of them from a single authenticated session.
+
+### Listing collections
+
+```
+"What collections do I have in Homebox?"
+```
+
+Claude will call `list_collections`, which returns all collections along with which one is your default.
+
+### Targeting a specific collection
+
+Every inventory tool accepts an optional `collection` parameter. You can pass either the collection's **name** (case-insensitive) or its **ID**:
+
+```
+"Show me all locations in my Artwork collection"
+"Search for 'lamp' in the Appliances collection"
+"Add a new location called 'Attic' to my Structure collection"
+```
+
+When no `collection` is specified, every tool operates on your account's default collection. Claude will generally ask which collection you mean if the intent is ambiguous, or will call `list_collections` first to discover what's available.
+
+### How it works
+
+Collection switching is **per-request** — there is no persistent "active collection" state. The MCP server passes Homebox's `X-Tenant` header on each API call, scoping that individual request to the requested collection. This means Claude can freely mix queries across collections in a single conversation without any switching overhead or risk of accidentally operating in the wrong collection.
 
 ## Troubleshooting
 

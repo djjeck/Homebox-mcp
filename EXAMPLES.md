@@ -301,6 +301,45 @@ When Claude retrieves data from Homebox, it can see:
 
 > "How are my items currently organized by location?"
 
+## Working with Multiple Collections
+
+If your Homebox account belongs to more than one collection, you can access all of them from Claude without switching accounts.
+
+### Discover your collections
+
+**Ask Claude:**
+
+> "What collections do I have in Homebox?"
+
+**What happens:**
+Claude calls `list_collections` and shows you all collections, noting which one is your default.
+
+---
+
+### Query a specific collection
+
+**Ask Claude:**
+
+> "Show me everything in my Artwork collection"
+
+or
+
+> "Search for 'sofa' in the Appliances collection"
+
+**What happens:**
+Claude passes the collection name to each inventory tool as needed. The request is scoped to that collection only — data from other collections is never mixed in.
+
+---
+
+### Cross-collection questions
+
+**Ask Claude:**
+
+> "Do I have any ladders? Check all my collections."
+
+**What happens:**
+Claude calls `list_collections` to discover all collections, then searches each one and combines the results for you.
+
 ## Getting Help
 
 If Claude seems confused or gives an error:
