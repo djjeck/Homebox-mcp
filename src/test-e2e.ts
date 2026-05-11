@@ -35,7 +35,19 @@ interface TestContext {
 
 interface TestCase {
   name: string;
+  // Minimum Homebox version required (semver, e.g. "0.25.0"). Omit for all versions.
+  minVersion?: string;
   run: (ctx: TestContext) => Promise<void>;
+}
+
+// Returns true if actual >= required (both "major.minor.patch", leading "v" stripped).
+function meetsMinVersion(actual: string, required: string): boolean {
+  const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
+  const [aMaj, aMin, aPat] = parse(actual);
+  const [rMaj, rMin, rPat] = parse(required);
+  if (aMaj !== rMaj) return aMaj > rMaj;
+  if (aMin !== rMin) return aMin > rMin;
+  return aPat >= rPat;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -99,7 +111,11 @@ function exec(cmd: string): void {
   execSync(cmd, { stdio: "inherit" });
 }
 
-
+async function fetchHomeboxVersion(): Promise<string> {
+  const res = await axios.get(`${HOMEBOX_URL}/api/v1/status`);
+  const version: string = res.data?.build?.version ?? "0.0.0";
+  return version.replace(/^v/, "");
+}
 
 async function registerTestUser(client: AxiosInstance): Promise<void> {
   try {
@@ -117,6 +133,28 @@ async function registerTestUser(client: AxiosInstance): Promise<void> {
       throw new Error(`Failed to register test user: ${error.message}`);
     }
   }
+}
+
+// Creates a named group via the Homebox REST API authenticated as the test user.
+// The creator is automatically the owner and a member of the new group.
+// Returns the new group's ID.
+async function createTestGroup(name: string): Promise<string> {
+  // Authenticate as the test user to get their token
+  const loginRes = await axios.post(`${HOMEBOX_URL}/api/v1/users/login`, {
+    username: TEST_EMAIL,
+    password: TEST_PASSWORD,
+  });
+  const token: string = loginRes.data.token;
+  const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+
+  const res = await axios.post(
+    `${HOMEBOX_URL}/api/v1/groups`,
+    { name },
+    { headers: { Authorization: authHeader, "Content-Type": "application/json" } }
+  );
+  const groupId: string = res.data.id;
+  console.log(`  ✅ Created test group: ${name} (${groupId})`);
+  return groupId;
 }
 
 // ── MCP client (Streamable HTTP) ─────────────────────────────────────────────
@@ -197,8 +235,17 @@ function stackRecreate(): void {
 let passed = 0;
 let failed = 0;
 
-async function runTestCase(tc: TestCase): Promise<boolean> {
+let skipped = 0;
+
+async function runTestCase(tc: TestCase, homeboxVersion: string): Promise<boolean> {
   process.stdout.write(`  • ${tc.name} ... `);
+
+  if (tc.minVersion && !meetsMinVersion(homeboxVersion, tc.minVersion)) {
+    console.log(`⏭  (requires Homebox >= ${tc.minVersion}, got ${homeboxVersion})`);
+    skipped++;
+    return true;
+  }
+
   const client = new McpClient();
   try {
     await client.initialize();
@@ -535,6 +582,85 @@ const TEST_CASES: TestCase[] = [
       await callTool("delete_location", { locationId: location.id });
     },
   },
+
+  {
+    name: "collections: list_collections returns all groups; collection param scopes inventory tools",
+    minVersion: "0.25.0",
+    async run({ callTool }) {
+      // list_collections must return at least two groups (default + the extra one created in setup)
+      const result = await callTool("list_collections", {});
+      const collections: any[] = result?.collections ?? [];
+      if (collections.length < 2)
+        throw new Error(`Expected at least 2 collections, got ${collections.length}`);
+
+      const defaultCol = collections.find((c: any) => c.isDefault);
+      if (!defaultCol) throw new Error("No collection marked as default");
+
+      const otherCol = collections.find((c: any) => !c.isDefault);
+      if (!otherCol) throw new Error("No non-default collection found");
+
+      // Create a location in the default collection (no collection param)
+      const locDefault = await callTool("create_location", { name: "Collection Test Location (default)" });
+
+      // Create a location in the other collection by name
+      const locOther = await callTool("create_location", {
+        name: "Collection Test Location (other)",
+        collection: otherCol.name,
+      });
+
+      // list_locations without collection param must see the default location, not the other
+      const defaultLocs: any[] = await callTool("list_locations", {});
+      if (!defaultLocs.find((l: any) => l.id === locDefault.id))
+        throw new Error("Default collection location not found in default list_locations");
+      if (defaultLocs.find((l: any) => l.id === locOther.id))
+        throw new Error("Other collection location leaked into default list_locations");
+
+      // list_locations scoped to otherCol by ID must see the other location, not the default
+      const otherLocs: any[] = await callTool("list_locations", { collection: otherCol.id });
+      if (!otherLocs.find((l: any) => l.id === locOther.id))
+        throw new Error("Other collection location not found when scoped by ID");
+      if (otherLocs.find((l: any) => l.id === locDefault.id))
+        throw new Error("Default collection location leaked into other collection list_locations");
+
+      // list_locations scoped to otherCol by name must give the same result as by ID
+      const otherLocsByName: any[] = await callTool("list_locations", { collection: otherCol.name });
+      if (!otherLocsByName.find((l: any) => l.id === locOther.id))
+        throw new Error("Other collection location not found when scoped by name");
+
+      // Create an item in the other collection and verify it doesn't bleed into the default
+      const itemOther = await callTool("create_item", {
+        name: "Collection Test Item (other)",
+        locationId: locOther.id,
+        collection: otherCol.id,
+      });
+      const searchDefault = await callTool("search_items", { query: "Collection Test Item" });
+      const defaultItems: any[] = searchDefault?.items ?? searchDefault ?? [];
+      if (defaultItems.find((i: any) => i.id === itemOther.id))
+        throw new Error("Item from other collection leaked into default collection search");
+
+      const searchOther = await callTool("search_items", {
+        query: "Collection Test Item",
+        collection: otherCol.id,
+      });
+      const otherItems: any[] = searchOther?.items ?? searchOther ?? [];
+      if (!otherItems.find((i: any) => i.id === itemOther.id))
+        throw new Error("Item not found when searching in other collection");
+
+      // Invalid collection name must produce a helpful error
+      try {
+        await callTool("list_locations", { collection: "nonexistent-collection-xyz" });
+        throw new Error("Expected error for nonexistent collection, got none");
+      } catch (err: any) {
+        if (!err.message.includes("not found"))
+          throw new Error(`Expected 'not found' error, got: ${err.message}`);
+      }
+
+      // Cleanup: delete from each collection explicitly
+      await callTool("delete_item", { itemId: itemOther.id, collection: otherCol.id });
+      await callTool("delete_location", { locationId: locOther.id, collection: otherCol.id });
+      await callTool("delete_location", { locationId: locDefault.id });
+    },
+  },
 ];
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -545,9 +671,15 @@ async function main(): Promise<void> {
   // We still need an httpClient instance to register the test user via Homebox REST API.
   const httpClient = axios.create({ baseURL: HOMEBOX_URL });
 
+  let homeboxVersion = "0.0.0";
   try {
     console.log("\n👤 Setting up test user...");
     await registerTestUser(httpClient);
+    homeboxVersion = await fetchHomeboxVersion();
+    console.log(`  ✅ Homebox version: ${homeboxVersion}`);
+    if (meetsMinVersion(homeboxVersion, "0.25.0")) {
+      await createTestGroup("Extra Collection");
+    }
   } catch (error: any) {
     console.error("\n❌ Stack setup failed:", error.message);
     stackDown();
@@ -557,7 +689,7 @@ async function main(): Promise<void> {
   console.log(`\n🧪 Running ${TEST_CASES.length} test case(s)...\n`);
 
   for (const tc of TEST_CASES) {
-    const ok = await runTestCase(tc);
+    const ok = await runTestCase(tc, homeboxVersion);
     if (!ok) {
       // Verify state is still clean enough to continue; if not, recreate
       try {
@@ -568,11 +700,17 @@ async function main(): Promise<void> {
         if (Array.isArray(locations) && locations.length > 0) {
           stackRecreate();
           await registerTestUser(httpClient);
+          if (meetsMinVersion(homeboxVersion, "0.25.0")) {
+            await createTestGroup("Extra Collection");
+          }
           console.log("  ✅ Stack recreated — continuing with remaining tests\n");
         }
       } catch {
         stackRecreate();
         await registerTestUser(httpClient);
+        if (meetsMinVersion(homeboxVersion, "0.25.0")) {
+          await createTestGroup("Extra Collection");
+        }
       }
     }
   }
@@ -580,7 +718,7 @@ async function main(): Promise<void> {
   stackDown();
 
   console.log(`\n${"=".repeat(40)}`);
-  console.log(`Results: ${passed} passed, ${failed} failed`);
+  console.log(`Results: ${passed} passed, ${failed} failed, ${skipped} skipped`);
   console.log("=".repeat(40));
 
   process.exit(failed > 0 ? 1 : 0);

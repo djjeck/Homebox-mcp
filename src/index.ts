@@ -33,6 +33,12 @@ interface HomeboxConfig {
   password: string;
 }
 
+interface Collection {
+  id: string;
+  name: string;
+  currency: string;
+}
+
 // Homebox API client
 class HomeboxClient {
   private axios: AxiosInstance;
@@ -43,6 +49,8 @@ class HomeboxClient {
   // Both are detected at startup via /api/v1/status and set in authenticate().
   private tagEndpoint: string = "/api/v1/tags";
   private tagFilterParam: string = "tags";
+  private collectionsCache: Collection[] | null = null;
+  private defaultGroupId: string | null = null;
 
   constructor(config: HomeboxConfig) {
     this.config = config;
@@ -100,7 +108,43 @@ class HomeboxClient {
     }
   }
 
-  async searchItems(query: string, locationId?: string, tagId?: string): Promise<any> {
+  async listCollections(): Promise<{ collections: (Collection & { isDefault: boolean })[] }> {
+    await this.ensureAuthenticated();
+    if (!this.collectionsCache) {
+      const [allRes, selfRes] = await Promise.all([
+        this.axios.get("/api/v1/groups/all"),
+        this.axios.get("/api/v1/users/self"),
+      ]);
+      this.collectionsCache = allRes.data as Collection[];
+      this.defaultGroupId = selfRes.data?.item?.defaultGroupId ?? null;
+    }
+    return {
+      collections: this.collectionsCache.map((c) => ({
+        ...c,
+        isDefault: c.id === this.defaultGroupId,
+      })),
+    };
+  }
+
+  // Resolves a collection name or UUID to a UUID, or throws if not found.
+  async resolveCollection(nameOrId: string): Promise<string> {
+    const { collections } = await this.listCollections();
+    // Exact UUID match
+    const byId = collections.find((c) => c.id === nameOrId);
+    if (byId) return byId.id;
+    // Case-insensitive name match
+    const lower = nameOrId.toLowerCase();
+    const byName = collections.find((c) => c.name.toLowerCase() === lower);
+    if (byName) return byName.id;
+    const names = collections.map((c) => `"${c.name}"`).join(", ");
+    throw new Error(`Collection "${nameOrId}" not found. Available collections: ${names}`);
+  }
+
+  private tenantHeaders(tenantId?: string): Record<string, string> {
+    return tenantId ? { "X-Tenant": tenantId } : {};
+  }
+
+  async searchItems(query: string, locationId?: string, tagId?: string, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
       const response = await this.axios.get("/api/v1/items", {
@@ -109,6 +153,7 @@ class HomeboxClient {
           ...(locationId ? { locations: [locationId] } : {}),
           ...(tagId ? { [this.tagFilterParam]: [tagId] } : {}),
         },
+        headers: this.tenantHeaders(tenantId),
       });
       const data = response.data;
       if (data?.items) data.items = data.items.map((i: any) => this.normalizeItem(i));
@@ -118,90 +163,110 @@ class HomeboxClient {
     }
   }
 
-  async getItem(itemId: string): Promise<any> {
+  async getItem(itemId: string, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get(`/api/v1/items/${itemId}`);
+      const response = await this.axios.get(`/api/v1/items/${itemId}`, {
+        headers: this.tenantHeaders(tenantId),
+      });
       return this.normalizeItem(response.data);
     } catch (error: any) {
       throw new Error(`Failed to get item: ${error.message}`);
     }
   }
 
-  async listLocations(): Promise<any> {
+  async listLocations(tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get("/api/v1/locations");
+      const response = await this.axios.get("/api/v1/locations", {
+        headers: this.tenantHeaders(tenantId),
+      });
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to list locations: ${error.message}`);
     }
   }
 
-  async getLocation(locationId: string): Promise<any> {
+  async getLocation(locationId: string, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get(`/api/v1/locations/${locationId}`);
+      const response = await this.axios.get(`/api/v1/locations/${locationId}`, {
+        headers: this.tenantHeaders(tenantId),
+      });
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to get location: ${error.message}`);
     }
   }
 
-  async listTags(): Promise<any> {
+  async listTags(tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get(this.tagEndpoint);
+      const response = await this.axios.get(this.tagEndpoint, {
+        headers: this.tenantHeaders(tenantId),
+      });
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to list tags: ${error.message}`);
     }
   }
 
-  async getTag(tagId: string): Promise<any> {
+  async getTag(tagId: string, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get(`${this.tagEndpoint}/${tagId}`);
+      const response = await this.axios.get(`${this.tagEndpoint}/${tagId}`, {
+        headers: this.tenantHeaders(tenantId),
+      });
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to get tag: ${error.message}`);
     }
   }
 
-  async getItemsByLocation(locationId: string): Promise<any> {
+  async getItemsByLocation(locationId: string, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get("/api/v1/items", { params: { locations: [locationId] } });
+      const response = await this.axios.get("/api/v1/items", {
+        params: { locations: [locationId] },
+        headers: this.tenantHeaders(tenantId),
+      });
       return (response.data?.items ?? []).map((i: any) => this.normalizeItem(i));
     } catch (error: any) {
       throw new Error(`Failed to get items by location: ${error.message}`);
     }
   }
 
-  async getItemsByTag(tagId: string): Promise<any> {
+  async getItemsByTag(tagId: string, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.get("/api/v1/items", { params: { [this.tagFilterParam]: [tagId] } });
+      const response = await this.axios.get("/api/v1/items", {
+        params: { [this.tagFilterParam]: [tagId] },
+        headers: this.tenantHeaders(tenantId),
+      });
       return (response.data?.items ?? []).map((i: any) => this.normalizeItem(i));
     } catch (error: any) {
       throw new Error(`Failed to get items by tag: ${error.message}`);
     }
   }
 
-  async createLocation(name: string, description?: string): Promise<any> {
+  async createLocation(name: string, description?: string, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.post("/api/v1/locations", { name, description });
+      const response = await this.axios.post("/api/v1/locations", { name, description }, {
+        headers: this.tenantHeaders(tenantId),
+      });
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to create location: ${error.message}`);
     }
   }
 
-  async deleteMaintenanceEntry(entryId: string): Promise<void> {
+  async deleteMaintenanceEntry(entryId: string, tenantId?: string): Promise<void> {
     await this.ensureAuthenticated();
     try {
-      await this.axios.delete(`/api/v1/maintenance/${entryId}`);
+      await this.axios.delete(`/api/v1/maintenance/${entryId}`, {
+        headers: this.tenantHeaders(tenantId),
+      });
     } catch (error: any) {
       throw new Error(`Failed to delete maintenance entry: ${error.message}`);
     }
@@ -213,7 +278,8 @@ class HomeboxClient {
     completedDate?: string,
     scheduledDate?: string,
     description?: string,
-    cost?: string
+    cost?: string,
+    tenantId?: string
   ): Promise<any> {
     await this.ensureAuthenticated();
     try {
@@ -223,14 +289,14 @@ class HomeboxClient {
         scheduledDate,
         description,
         cost,
-      });
+      }, { headers: this.tenantHeaders(tenantId) });
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to create maintenance entry: ${error.message}`);
     }
   }
 
-  async updateItem(itemId: string, data: Record<string, any>): Promise<any> {
+  async updateItem(itemId: string, data: Record<string, any>, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
       // v0.22.x expects labelIds; v0.23.0+ expects tagIds. Translate if needed.
@@ -239,7 +305,9 @@ class HomeboxClient {
         const { tagIds, ...rest } = data;
         body = { ...rest, labelIds: tagIds };
       }
-      const response = await this.axios.put(`/api/v1/items/${itemId}`, body);
+      const response = await this.axios.put(`/api/v1/items/${itemId}`, body, {
+        headers: this.tenantHeaders(tenantId),
+      });
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to update item: ${error.message}`);
@@ -251,7 +319,8 @@ class HomeboxClient {
     locationId: string,
     description?: string,
     tagIds?: string[],
-    parentId?: string
+    parentId?: string,
+    tenantId?: string
   ): Promise<any> {
     await this.ensureAuthenticated();
     try {
@@ -261,56 +330,66 @@ class HomeboxClient {
         description,
         labelIds: tagIds,
         parentId,
-      });
+      }, { headers: this.tenantHeaders(tenantId) });
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to create item: ${error.message}`);
     }
   }
 
-  async createTag(name: string, description?: string): Promise<any> {
+  async createTag(name: string, description?: string, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
-      const response = await this.axios.post(this.tagEndpoint, { name, description });
+      const response = await this.axios.post(this.tagEndpoint, { name, description }, {
+        headers: this.tenantHeaders(tenantId),
+      });
       return response.data;
     } catch (error: any) {
       throw new Error(`Failed to create tag: ${error.message}`);
     }
   }
 
-  async deleteItem(itemId: string): Promise<void> {
+  async deleteItem(itemId: string, tenantId?: string): Promise<void> {
     await this.ensureAuthenticated();
     try {
-      await this.axios.delete(`/api/v1/items/${itemId}`);
+      await this.axios.delete(`/api/v1/items/${itemId}`, {
+        headers: this.tenantHeaders(tenantId),
+      });
     } catch (error: any) {
       throw new Error(`Failed to delete item: ${error.message}`);
     }
   }
 
-  async deleteLocation(locationId: string): Promise<void> {
+  async deleteLocation(locationId: string, tenantId?: string): Promise<void> {
     await this.ensureAuthenticated();
     try {
-      await this.axios.delete(`/api/v1/locations/${locationId}`);
+      await this.axios.delete(`/api/v1/locations/${locationId}`, {
+        headers: this.tenantHeaders(tenantId),
+      });
     } catch (error: any) {
       throw new Error(`Failed to delete location: ${error.message}`);
     }
   }
 
-  async deleteTag(tagId: string): Promise<void> {
+  async deleteTag(tagId: string, tenantId?: string): Promise<void> {
     await this.ensureAuthenticated();
     try {
-      await this.axios.delete(`${this.tagEndpoint}/${tagId}`);
+      await this.axios.delete(`${this.tagEndpoint}/${tagId}`, {
+        headers: this.tenantHeaders(tenantId),
+      });
     } catch (error: any) {
       throw new Error(`Failed to delete tag: ${error.message}`);
     }
   }
 
-  async proxyAttachment(itemId: string, attachmentId: string): Promise<{ body: ReadableStream | null; contentType: string; contentDisposition: string }> {
+  async proxyAttachment(itemId: string, attachmentId: string, tenantId?: string): Promise<{ body: ReadableStream | null; contentType: string; contentDisposition: string }> {
     await this.ensureAuthenticated();
     const token = this.authToken!;
     const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
     const url = `${this.config.homeboxUrl}/api/v1/items/${itemId}/attachments/${attachmentId}`;
-    const response = await fetch(url, { headers: { Authorization: authHeader } });
+    const headers: Record<string, string> = { Authorization: authHeader };
+    if (tenantId) headers["X-Tenant"] = tenantId;
+    const response = await fetch(url, { headers });
     if (!response.ok) {
       throw new Error(`Homebox returned ${response.status} ${response.statusText}`);
     }
@@ -321,10 +400,12 @@ class HomeboxClient {
     };
   }
 
-  async deleteItemAttachment(itemId: string, attachmentId: string): Promise<void> {
+  async deleteItemAttachment(itemId: string, attachmentId: string, tenantId?: string): Promise<void> {
     await this.ensureAuthenticated();
     try {
-      await this.axios.delete(`/api/v1/items/${itemId}/attachments/${attachmentId}`);
+      await this.axios.delete(`/api/v1/items/${itemId}/attachments/${attachmentId}`, {
+        headers: this.tenantHeaders(tenantId),
+      });
     } catch (error: any) {
       throw new Error(`Failed to delete attachment: ${error.message}`);
     }
@@ -335,13 +416,15 @@ class HomeboxClient {
     attachmentId: string,
     title?: string,
     type?: string,
-    primary?: boolean
+    primary?: boolean,
+    tenantId?: string
   ): Promise<any> {
     await this.ensureAuthenticated();
     try {
       const response = await this.axios.put(
         `/api/v1/items/${itemId}/attachments/${attachmentId}`,
-        { title, type, primary }
+        { title, type, primary },
+        { headers: this.tenantHeaders(tenantId) }
       );
       return response.data;
     } catch (error: any) {
@@ -353,7 +436,8 @@ class HomeboxClient {
     itemId: string,
     url: string,
     name?: string,
-    type?: string
+    type?: string,
+    tenantId?: string
   ): Promise<any> {
     await this.ensureAuthenticated();
 
@@ -387,7 +471,7 @@ class HomeboxClient {
       const response = await this.axios.post(
         `/api/v1/items/${itemId}/attachments`,
         form,
-        { headers: { "Content-Type": "multipart/form-data" } }
+        { headers: { "Content-Type": "multipart/form-data", ...this.tenantHeaders(tenantId) } }
       );
       return response.data;
     } catch (error: any) {
@@ -471,8 +555,23 @@ function loadConfig(): HomeboxConfig {
   process.exit(1);
 }
 
+const COLLECTION_PARAM = {
+  collection: {
+    type: "string",
+    description: "Optional: name or ID of the collection (group) to operate in. If omitted, uses the account's default collection. Use list_collections to see available collections.",
+  },
+} as const;
+
 // Define available tools
 const TOOLS: Tool[] = [
+  {
+    name: "list_collections",
+    description: "List all Homebox collections (groups) this account belongs to. Each collection is a completely independent inventory — items, locations, and tags are not shared between collections. Use the collection name or ID with other tools to target a specific collection. The default collection is used when no collection is specified.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
   {
     name: "search_items",
     description: "Search for items in your Homebox inventory by name, description, or other fields. Optionally filter by location or tag. Returns a list of matching items with their basic information.",
@@ -491,6 +590,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "Optional: filter results to items with this tag ID",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["query"],
     },
@@ -505,6 +605,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "The ID of the item to retrieve",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["itemId"],
     },
@@ -514,7 +615,7 @@ const TOOLS: Tool[] = [
     description: "List all locations in your Homebox inventory. Locations are where items are stored (e.g., 'Office', 'Warehouse', 'Storage Room'). Returns location names, IDs, and descriptions.",
     inputSchema: {
       type: "object",
-      properties: {},
+      properties: { ...COLLECTION_PARAM },
     },
   },
   {
@@ -527,6 +628,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "The ID of the location to retrieve",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["locationId"],
     },
@@ -536,7 +638,7 @@ const TOOLS: Tool[] = [
     description: "List all tags in your Homebox inventory. Tags are used to categorize items (e.g., 'Electronics', 'Important', 'Fragile'). Returns tag names, IDs, and descriptions.",
     inputSchema: {
       type: "object",
-      properties: {},
+      properties: { ...COLLECTION_PARAM },
     },
   },
   {
@@ -549,6 +651,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "The ID of the tag to retrieve",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["tagId"],
     },
@@ -563,6 +666,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "The ID of the location",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["locationId"],
     },
@@ -577,6 +681,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "The ID of the tag",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["tagId"],
     },
@@ -591,6 +696,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "ID of the maintenance entry to delete",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["entryId"],
     },
@@ -625,6 +731,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "Cost of the service as a numeric string (e.g. \"85.00\")",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["itemId", "name"],
     },
@@ -747,6 +854,7 @@ const TOOLS: Tool[] = [
             },
           },
         },
+        ...COLLECTION_PARAM,
       },
       required: ["itemId", "name", "locationId"],
     },
@@ -778,6 +886,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "ID of a parent item, if this item is a sub-item",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["name", "locationId"],
     },
@@ -796,6 +905,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "Optional description of the tag",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["name"],
     },
@@ -814,6 +924,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "Optional description of the location",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["name"],
     },
@@ -828,6 +939,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "ID of the item to delete",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["itemId"],
     },
@@ -842,6 +954,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "ID of the location to delete",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["locationId"],
     },
@@ -856,6 +969,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "ID of the tag to delete",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["tagId"],
     },
@@ -882,6 +996,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "MIME type of the attachment (from the mimeType field in the attachments array), if known. Included in the resource_link so clients can handle the content correctly.",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["itemId", "attachmentId", "title"],
     },
@@ -900,6 +1015,7 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "ID of the attachment to delete",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["itemId", "attachmentId"],
     },
@@ -931,6 +1047,7 @@ const TOOLS: Tool[] = [
           type: "boolean",
           description: "Whether this attachment is the primary photo for the item",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["itemId", "attachmentId"],
     },
@@ -958,6 +1075,7 @@ const TOOLS: Tool[] = [
           enum: ["photo", "manual", "warranty", "attachment", "receipt", "thumbnail"],
           description: "Attachment type. Defaults to 'attachment' if omitted.",
         },
+        ...COLLECTION_PARAM,
       },
       required: ["itemId", "url"],
     },
@@ -1020,12 +1138,25 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
         throw new Error("Missing arguments");
       }
 
+      // Resolve optional collection name/id to a tenant UUID for all tools that support it
+      const tenantId = args.collection
+        ? await homeboxClient.resolveCollection(args.collection as string)
+        : undefined;
+
       switch (name) {
+      case "list_collections": {
+        const result = await homeboxClient.listCollections();
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
       case "search_items": {
         const result = await homeboxClient.searchItems(
           args.query as string,
           args.locationId as string | undefined,
           args.tagId as string | undefined,
+          tenantId,
         );
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -1033,56 +1164,56 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
       }
 
       case "get_item": {
-        const result = await homeboxClient.getItem(args.itemId as string);
+        const result = await homeboxClient.getItem(args.itemId as string, tenantId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
       }
 
       case "list_locations": {
-        const result = await homeboxClient.listLocations();
+        const result = await homeboxClient.listLocations(tenantId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
       }
 
       case "get_location": {
-        const result = await homeboxClient.getLocation(args.locationId as string);
+        const result = await homeboxClient.getLocation(args.locationId as string, tenantId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
       }
 
       case "list_tags": {
-        const result = await homeboxClient.listTags();
+        const result = await homeboxClient.listTags(tenantId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
       }
 
       case "get_tag": {
-        const result = await homeboxClient.getTag(args.tagId as string);
+        const result = await homeboxClient.getTag(args.tagId as string, tenantId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
       }
 
       case "get_items_by_location": {
-        const result = await homeboxClient.getItemsByLocation(args.locationId as string);
+        const result = await homeboxClient.getItemsByLocation(args.locationId as string, tenantId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
       }
 
       case "get_items_by_tag": {
-        const result = await homeboxClient.getItemsByTag(args.tagId as string);
+        const result = await homeboxClient.getItemsByTag(args.tagId as string, tenantId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
       }
 
       case "delete_maintenance_entry": {
-        await homeboxClient.deleteMaintenanceEntry(args.entryId as string);
+        await homeboxClient.deleteMaintenanceEntry(args.entryId as string, tenantId);
         return {
           content: [{ type: "text", text: "Maintenance entry deleted successfully." }],
         };
@@ -1095,7 +1226,8 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
           args.completedDate as string | undefined,
           args.scheduledDate as string | undefined,
           args.description as string | undefined,
-          args.cost as string | undefined
+          args.cost as string | undefined,
+          tenantId,
         );
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -1103,8 +1235,8 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
       }
 
       case "update_item": {
-        const { itemId, ...data } = args as { itemId: string; [key: string]: any };
-        const result = await homeboxClient.updateItem(itemId, data);
+        const { itemId, collection: _c, ...data } = args as { itemId: string; collection?: string; [key: string]: any };
+        const result = await homeboxClient.updateItem(itemId, data, tenantId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
@@ -1116,7 +1248,8 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
           args.locationId as string,
           args.description as string | undefined,
           args.tagIds as string[] | undefined,
-          args.parentId as string | undefined
+          args.parentId as string | undefined,
+          tenantId,
         );
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -1126,7 +1259,8 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
       case "create_tag": {
         const result = await homeboxClient.createTag(
           args.name as string,
-          args.description as string | undefined
+          args.description as string | undefined,
+          tenantId,
         );
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -1136,7 +1270,8 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
       case "create_location": {
         const result = await homeboxClient.createLocation(
           args.name as string,
-          args.description as string | undefined
+          args.description as string | undefined,
+          tenantId,
         );
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -1144,21 +1279,21 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
       }
 
       case "delete_item": {
-        await homeboxClient.deleteItem(args.itemId as string);
+        await homeboxClient.deleteItem(args.itemId as string, tenantId);
         return {
           content: [{ type: "text", text: "Item deleted successfully." }],
         };
       }
 
       case "delete_location": {
-        await homeboxClient.deleteLocation(args.locationId as string);
+        await homeboxClient.deleteLocation(args.locationId as string, tenantId);
         return {
           content: [{ type: "text", text: "Location deleted successfully." }],
         };
       }
 
       case "delete_tag": {
-        await homeboxClient.deleteTag(args.tagId as string);
+        await homeboxClient.deleteTag(args.tagId as string, tenantId);
         return {
           content: [{ type: "text", text: "Tag deleted successfully." }],
         };
@@ -1189,7 +1324,8 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
       case "delete_item_attachment": {
         await homeboxClient.deleteItemAttachment(
           args.itemId as string,
-          args.attachmentId as string
+          args.attachmentId as string,
+          tenantId,
         );
         return {
           content: [{ type: "text", text: "Attachment deleted successfully." }],
@@ -1202,7 +1338,8 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
           args.attachmentId as string,
           args.title as string | undefined,
           args.type as string | undefined,
-          args.primary as boolean | undefined
+          args.primary as boolean | undefined,
+          tenantId,
         );
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -1214,7 +1351,8 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
           args.itemId as string,
           args.url as string,
           args.name as string | undefined,
-          args.type as string | undefined
+          args.type as string | undefined,
+          tenantId,
         );
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
