@@ -346,6 +346,12 @@ const TEST_CASES: TestCase[] = [
       if (!(partial.tags as any[]).find((t: any) => t.id === tag.id))
         throw new Error("Partial update wiped tags");
 
+      // Purchase price: must be stored and returned as a number
+      await callTool("update_item", { itemId: created.id, purchasePrice: 49.99 });
+      const priced = await callTool("get_item", { itemId: created.id });
+      if (typeof priced.purchasePrice !== "number") throw new Error(`Expected purchasePrice to be a number, got ${typeof priced.purchasePrice}`);
+      if (priced.purchasePrice !== 49.99) throw new Error(`Expected purchasePrice 49.99, got ${priced.purchasePrice}`);
+
       const searchResult = await callTool("search_items", { query: "updated" });
       const items = searchResult?.items ?? searchResult ?? [];
       const found = (items as any[]).find((i: any) => i.id === created.id);

@@ -246,6 +246,9 @@ class HomeboxClient {
       };
       // Apply patch fields, remapping tagIds to the version-appropriate key if needed.
       const { tagIds, ...restPatch } = patch;
+      // Homebox PUT requires these as numbers; coerce in case the base state has them as strings.
+      if (restPatch.purchasePrice !== undefined) restPatch.purchasePrice = Number(restPatch.purchasePrice);
+      if (restPatch.soldPrice !== undefined) restPatch.soldPrice = Number(restPatch.soldPrice);
       const body: Record<string, any> = {
         ...base,
         ...restPatch,
@@ -648,8 +651,8 @@ const TOOLS: Tool[] = [
           description: "Vendor or store where the item was purchased",
         },
         purchasePrice: {
-          type: "string",
-          description: "Original purchase price as a numeric string (no currency symbol)",
+          type: "number",
+          description: "Original purchase price (numeric, no currency symbol)",
         },
         lifetimeWarranty: {
           type: "boolean",
@@ -672,8 +675,8 @@ const TOOLS: Tool[] = [
           description: "Name of the buyer, or empty string if retired without a sale",
         },
         soldPrice: {
-          type: "string",
-          description: "Sale price as a numeric string, or '0' if retired without a sale",
+          type: "number",
+          description: "Sale price (numeric), or 0 if retired without a sale",
         },
         soldNotes: {
           type: "string",
