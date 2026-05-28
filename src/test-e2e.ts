@@ -31,6 +31,8 @@ interface TestContext {
   callTool: (name: string, args: Record<string, any>) => Promise<any>;
   callToolRaw: (name: string, args: Record<string, any>) => Promise<any>;
   readResource: (uri: string) => Promise<any>;
+  /** Authenticated Homebox HTTP client — use to set up state the MCP doesn't expose. */
+  homeboxHttp: AxiosInstance;
 }
 
 interface TestCase {
@@ -237,7 +239,7 @@ let failed = 0;
 
 let skipped = 0;
 
-async function runTestCase(tc: TestCase, homeboxVersion: string): Promise<boolean> {
+async function runTestCase(tc: TestCase, homeboxVersion: string, homeboxHttp: AxiosInstance): Promise<boolean> {
   process.stdout.write(`  • ${tc.name} ... `);
 
   if (tc.minVersion && !meetsMinVersion(homeboxVersion, tc.minVersion)) {
@@ -253,6 +255,7 @@ async function runTestCase(tc: TestCase, homeboxVersion: string): Promise<boolea
       callTool: (n, a) => client.callTool(n, a),
       callToolRaw: (n, a) => client.callToolRaw(n, a),
       readResource: (uri) => client.readResource(uri),
+      homeboxHttp,
     });
     await client.close();
     console.log("✅");
@@ -760,6 +763,24 @@ const TEST_CASES: TestCase[] = [
       await callTool("delete_location", { locationId: locDefault.id });
     },
   },
+
+  {
+    name: "auth: re-authenticates transparently after token invalidation (401 retry)",
+    async run({ callTool, homeboxHttp }) {
+      // Confirm the MCP server is authenticated and working.
+      const before: any[] = await callTool("list_locations", {});
+      if (!Array.isArray(before)) throw new Error("Expected array from list_locations before logout");
+
+      // Force the server's token to expire by logging out the test user.
+      // The MCP server holds the same token; subsequent calls should 401 and then
+      // re-authenticate automatically via the interceptor.
+      await homeboxHttp.post("/api/v1/users/logout");
+
+      // This call should trigger the 401 interceptor, re-authenticate, and succeed.
+      const after: any[] = await callTool("list_locations", {});
+      if (!Array.isArray(after)) throw new Error("Expected array from list_locations after re-auth");
+    },
+  },
 ];
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -788,7 +809,7 @@ async function main(): Promise<void> {
   console.log(`\n🧪 Running ${TEST_CASES.length} test case(s)...\n`);
 
   for (const tc of TEST_CASES) {
-    const ok = await runTestCase(tc, homeboxVersion);
+    const ok = await runTestCase(tc, homeboxVersion, httpClient);
     if (!ok) {
       // Verify state is still clean enough to continue; if not, recreate
       try {

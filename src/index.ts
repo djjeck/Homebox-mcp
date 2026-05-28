@@ -71,6 +71,17 @@ class HomeboxClient {
         return parts.join("&");
       },
     });
+
+    // Re-authenticate on 401 (expired token) and retry the request once.
+    this.axios.interceptors.response.use(undefined, async (error) => {
+      if (error.response?.status === 401 && !error.config?._retried) {
+        error.config._retried = true;
+        this.authToken = null;
+        await this.authenticate();
+        return this.axios.request(error.config);
+      }
+      return Promise.reject(error);
+    });
   }
 
   async authenticate(): Promise<void> {
