@@ -198,6 +198,24 @@ Claude gets items from both locations and compares them
 
 **Ask Claude:**
 
+> "Show me the maintenance history for my pool"
+
+**What happens:**
+Claude calls `get_item_maintenance` with the pool's item ID and lists all entries with their dates, descriptions, and costs.
+
+---
+
+**Ask Claude:**
+
+> "Has my boiler been serviced this year? If not, create a to-do."
+
+**What happens:**
+Claude calls `get_item_maintenance` to check for recent entries, then decides whether to add a task.
+
+---
+
+**Ask Claude:**
+
 > "Which of my items have warranty information recorded?"
 
 **What happens:**

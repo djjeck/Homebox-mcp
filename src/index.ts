@@ -272,6 +272,18 @@ class HomeboxClient {
     }
   }
 
+  async getItemMaintenance(itemId: string, tenantId?: string): Promise<any> {
+    await this.ensureAuthenticated();
+    try {
+      const response = await this.axios.get(`/api/v1/items/${itemId}/maintenance`, {
+        headers: this.tenantHeaders(tenantId),
+      });
+      return response.data ?? [];
+    } catch (error: any) {
+      throw new Error(`Failed to get maintenance entries: ${error.message}`);
+    }
+  }
+
   async deleteMaintenanceEntry(entryId: string, tenantId?: string): Promise<void> {
     await this.ensureAuthenticated();
     try {
@@ -764,6 +776,21 @@ const TOOLS: Tool[] = [
         ...COLLECTION_PARAM,
       },
       required: ["tagId"],
+    },
+  },
+  {
+    name: "get_item_maintenance",
+    description: "List all maintenance entries for a specific item. Returns completed and scheduled maintenance events with their dates, names, descriptions, and costs. Use this to check existing maintenance history before creating new entries.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        itemId: {
+          type: "string",
+          description: "ID of the item whose maintenance history to retrieve",
+        },
+        ...COLLECTION_PARAM,
+      },
+      required: ["itemId"],
     },
   },
   {
@@ -1384,6 +1411,13 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
 
       case "get_items_by_tag": {
         const result = await homeboxClient.getItemsByTag(args.tagId as string, tenantId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      }
+
+      case "get_item_maintenance": {
+        const result = await homeboxClient.getItemMaintenance(args.itemId as string, tenantId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };

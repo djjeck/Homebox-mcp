@@ -420,7 +420,7 @@ const TEST_CASES: TestCase[] = [
   },
 
   {
-    name: "maintenance entries: create, then delete",
+    name: "maintenance entries: create, list via get_item_maintenance, then delete",
     async run({ callTool }) {
       const location = await callTool("create_location", { name: "Maintenance Test Location" });
       const item = await callTool("create_item", { name: "Maintenance Test Item", locationId: location.id });
@@ -434,12 +434,21 @@ const TEST_CASES: TestCase[] = [
       });
       if (!entry.id) throw new Error("Expected maintenance entry to have an id");
 
+      // get_item_maintenance must return the created entry
+      const entries: any[] = await callTool("get_item_maintenance", { itemId: item.id });
+      if (!Array.isArray(entries)) throw new Error(`get_item_maintenance: expected array, got ${typeof entries}`);
+      const found = entries.find((e: any) => e.id === entry.id);
+      if (!found) throw new Error("get_item_maintenance: created entry not found");
+      if (found.name !== "Annual service") throw new Error(`get_item_maintenance: expected name 'Annual service', got '${found.name}'`);
+      if (parseFloat(found.cost) !== 150) throw new Error(`get_item_maintenance: expected cost 150, got '${found.cost}'`);
+
       await callTool("delete_maintenance_entry", { entryId: entry.id });
 
-      const fetched = await callTool("get_item", { itemId: item.id });
-      const entries = fetched.maintenanceEntries ?? fetched.maintenance ?? [];
-      if ((entries as any[]).length !== 0)
-        throw new Error(`Expected 0 maintenance entries after delete, got ${(entries as any[]).length}`);
+      // Verify deletion via get_item_maintenance
+      const afterDelete: any[] = await callTool("get_item_maintenance", { itemId: item.id });
+      if (!Array.isArray(afterDelete)) throw new Error("get_item_maintenance after delete: expected array");
+      if (afterDelete.find((e: any) => e.id === entry.id))
+        throw new Error("get_item_maintenance: entry still present after delete");
 
       // Cleanup
       await callTool("delete_item", { itemId: item.id });

@@ -12,7 +12,7 @@ This MCP server acts as a bridge between AI assistants (like Claude) and your Ho
 - List all tags/categories you use
 - Find all items in a specific location or tag
 - Create, update, and delete items, locations, and tags
-- Record and delete maintenance entries
+- Read, record, update, and delete maintenance entries
 - Upload, download, update, and delete item attachments
 
 ## Deployment Options
@@ -262,9 +262,10 @@ The MCP server provides these tools:
 15. **create_tag** - Add a new tag/category
 16. **update_tag** - Rename a tag, change its description, color, icon, or parent
 17. **delete_tag** - Delete a tag
-18. **create_maintenance_entry** - Record a maintenance event on an item
-19. **update_maintenance_entry** - Update an existing maintenance entry (name, dates, description, cost)
-20. **delete_maintenance_entry** - Delete a maintenance entry
+18. **get_item_maintenance** - List all maintenance entries for an item (completed and scheduled)
+19. **create_maintenance_entry** - Record a maintenance event on an item
+20. **update_maintenance_entry** - Update an existing maintenance entry (name, dates, description, cost)
+21. **delete_maintenance_entry** - Delete a maintenance entry
 
 **Attachments**
 
