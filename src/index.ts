@@ -469,7 +469,7 @@ class HomeboxClient {
     itemId: string,
     url: string,
     name?: string,
-    type?: string,
+    type?: AttachmentType,
     tenantId?: string
   ): Promise<any> {
     await this.ensureAuthenticated();
@@ -631,6 +631,9 @@ function loadConfig(): HomeboxConfig {
   console.error("  3. config.json (copy from config.json.example)");
   process.exit(1);
 }
+
+const ATTACHMENT_TYPES = ["photo", "manual", "warranty", "attachment", "receipt", "thumbnail"] as const;
+type AttachmentType = typeof ATTACHMENT_TYPES[number];
 
 const COLLECTION_PARAM = {
   collection: {
@@ -1564,11 +1567,15 @@ function setupHandlers(server: Server, homeboxClient: HomeboxClient, attachmentB
       }
 
       case "upload_item_attachment": {
+        const rawType = args.type as string | undefined;
+        if (rawType !== undefined && !(ATTACHMENT_TYPES as readonly string[]).includes(rawType)) {
+          throw new Error(`Invalid attachment type "${rawType}". Must be one of: ${ATTACHMENT_TYPES.join(", ")}`);
+        }
         const result = await homeboxClient.uploadItemAttachment(
           args.itemId as string,
           args.url as string,
           args.name as string | undefined,
-          args.type as string | undefined,
+          rawType as AttachmentType | undefined,
           tenantId,
         );
         return {
