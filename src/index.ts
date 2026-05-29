@@ -78,10 +78,7 @@ class HomeboxClient {
         error.config._retried = true;
         this.authToken = null;
         await this.authenticate();
-        const authHeader = this.authToken!.startsWith("Bearer ")
-          ? this.authToken!
-          : `Bearer ${this.authToken!}`;
-        error.config.headers = { ...error.config.headers, Authorization: authHeader };
+        error.config.headers.delete("Authorization");
         return this.axios.request(error.config);
       }
       return Promise.reject(error);
@@ -586,6 +583,12 @@ class HomeboxClient {
     if (!this.authToken) {
       await this.authenticate();
     }
+  }
+
+  // For testing only: injects a garbage token so the next request triggers a 401 retry.
+  injectInvalidToken(): void {
+    this.authToken = "invalid-token-for-testing";
+    this.axios.defaults.headers.common["Authorization"] = "Bearer invalid-token-for-testing";
   }
 }
 
@@ -1709,6 +1712,15 @@ async function main() {
         if (url.pathname === "/health") {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ status: "ok", version: VERSION }));
+          return;
+        }
+
+        // Test-only endpoint: injects a garbage token to exercise the 401 retry path.
+        // Only active when NODE_ENV=test.
+        if (url.pathname === "/test/invalidate-token" && req.method === "POST" && process.env.NODE_ENV === "test") {
+          homeboxClient.injectInvalidToken();
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
           return;
         }
 

@@ -775,15 +775,14 @@ const TEST_CASES: TestCase[] = [
 
   {
     name: "auth: re-authenticates transparently after token invalidation (401 retry)",
-    async run({ callTool, homeboxHttp }) {
+    async run({ callTool }) {
       // Confirm the MCP server is authenticated and working.
       const before: any[] = await callTool("list_locations", {});
-      if (!Array.isArray(before)) throw new Error("Expected array from list_locations before logout");
+      if (!Array.isArray(before)) throw new Error("Expected array from list_locations before token invalidation");
 
-      // Force the server's token to expire by logging out the test user.
-      // The MCP server holds the same token; subsequent calls should 401 and then
-      // re-authenticate automatically via the interceptor.
-      await homeboxHttp.post("/api/v1/users/logout");
+      // Inject a garbage token into the MCP server so the next request gets a 401.
+      // The server must then re-authenticate and retry transparently.
+      await axios.post("http://localhost:8811/test/invalidate-token");
 
       // This call should trigger the 401 interceptor, re-authenticate, and succeed.
       const after: any[] = await callTool("list_locations", {});

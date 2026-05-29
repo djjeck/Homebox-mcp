@@ -23,6 +23,7 @@ services:
       - HOMEBOX_PASSWORD=TestPassword123!
       - PORT=8811
       - ATTACHMENT_BASE_URL=http://localhost:8811
+      - NODE_ENV=test
     ports:
       - "8811:8811"
     depends_on:
