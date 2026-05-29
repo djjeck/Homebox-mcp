@@ -2,6 +2,8 @@
 
 A Model Context Protocol (MCP) server that connects to your Homebox home inventory system, allowing AI assistants to query and explore your home inventory data in real-time.
 
+> **Maintained fork** — This is an actively maintained fork of [jeeves5454/Homebox-mcp](https://github.com/jeeves5454/Homebox-mcp), which is no longer maintained. New features, bug fixes, and releases are published here.
+
 ## What is This?
 
 This MCP server acts as a bridge between AI assistants (like Claude) and your Homebox home inventory database. It allows your AI assistant to:
