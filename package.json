@@ -11,7 +11,9 @@
     "test": "node test-connection.js",
     "test:e2e": "tsc && node dist/test-e2e.js",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "lint": "eslint src/",
+    "lint:fix": "eslint --fix src/"
   },
   "keywords": [
     "mcp",
@@ -27,6 +29,12 @@
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
+    "@typescript-eslint/eslint-plugin": "^8.60.0",
+    "@typescript-eslint/parser": "^8.60.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
     "prettier": "^3.8.3",
     "typescript": "^5.4.5"
   }

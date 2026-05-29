@@ -14,13 +14,14 @@
 import { execSync } from 'child_process';
 import {
   createServer as createHttpServer,
-  IncomingMessage,
-  ServerResponse,
-  Server as HttpServer,
+  type IncomingMessage,
+  type Server as HttpServer,
+  type ServerResponse,
 } from 'http';
-import axios, { AxiosInstance } from 'axios';
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import axios, { type AxiosInstance } from 'axios';
 
 // ── Configuration ────────────────────────────────────────────────────────────
 

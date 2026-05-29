@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 
+import { randomUUID } from 'crypto';
+import { existsSync, readFileSync } from 'fs';
+import { createServer, type IncomingMessage, type ServerResponse } from 'http';
+import { createRequire } from 'module';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -7,15 +14,9 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
-  Tool,
+  type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import axios, { AxiosInstance } from 'axios';
-import { readFileSync, existsSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { createRequire } from 'module';
-import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { randomUUID } from 'crypto';
+import axios, { type AxiosInstance } from 'axios';
 
 // Get the directory of the current module
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +25,7 @@ const __dirname = dirname(__filename);
 // Load package.json for version info
 const require = createRequire(import.meta.url);
 const packageJson = require('../package.json');
+
 const VERSION = packageJson.version;
 
 // Configuration interface
