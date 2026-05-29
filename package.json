@@ -13,7 +13,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint src/",
-    "lint:fix": "eslint --fix src/"
+    "lint:fix": "eslint --fix src/",
+    "validate": "npm run lint:fix && npm run format && npm run build"
   },
   "keywords": [
     "mcp",
