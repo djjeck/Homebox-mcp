@@ -78,6 +78,10 @@ class HomeboxClient {
         error.config._retried = true;
         this.authToken = null;
         await this.authenticate();
+        const authHeader = this.authToken!.startsWith("Bearer ")
+          ? this.authToken!
+          : `Bearer ${this.authToken!}`;
+        error.config.headers = { ...error.config.headers, Authorization: authHeader };
         return this.axios.request(error.config);
       }
       return Promise.reject(error);
