@@ -2,9 +2,9 @@ name: Build and Publish Docker Image
 
 on:
   workflow_run:
-    workflows: [ "Docker Image CI" ]
-    branches: [ "main" ]
-    types: [ "completed" ]
+    workflows: ['Docker Image CI']
+    branches: ['main']
+    types: ['completed']
   push:
     tags:
       - 'v*'
@@ -51,7 +51,7 @@ jobs:
 
   build-and-push:
     runs-on: ubuntu-latest
-    needs: [ test ]
+    needs: [test]
     # For workflow_run: skip the test job (it didn't run), gate on CI conclusion instead.
     # For push/workflow_dispatch: test job ran — only proceed if it succeeded.
     if: |

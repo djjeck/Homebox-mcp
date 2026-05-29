@@ -30,7 +30,7 @@ services:
 
     # Expose the HTTP/SSE port for claude.ai and other HTTP-based MCP clients
     ports:
-      - "8811:8811"
+      - '8811:8811'
 
 # If Homebox is in a separate docker-compose, you can reference its network
 networks:

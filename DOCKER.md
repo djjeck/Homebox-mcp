@@ -135,13 +135,7 @@ Claude Desktop launches the MCP server as a subprocess and communicates over std
      "mcpServers": {
        "homebox": {
          "command": "docker",
-         "args": [
-           "exec",
-           "-i",
-           "homebox-mcp-server",
-           "node",
-           "/app/dist/index.js"
-         ],
+         "args": ["exec", "-i", "homebox-mcp-server", "node", "/app/dist/index.js"],
          "env": {}
        }
      }
@@ -231,7 +225,7 @@ chmod 600 /share/Container/homebox-mcp/config.json
          - HOMEBOX_PASSWORD=your-password
          - PORT=8811
        ports:
-         - "8811:8811"
+         - '8811:8811'
        networks:
          - qnet-static-eth0-your-network-id
    ```

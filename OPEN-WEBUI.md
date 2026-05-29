@@ -269,7 +269,7 @@ Keep quantities current so the LLM knows what's actually available.
 If you want to deploy both Homebox and Open WebUI together, here's an example:
 
 ```yaml
-version: "3.8"
+version: '3.8'
 
 services:
   homebox:
@@ -283,7 +283,7 @@ services:
     volumes:
       - homebox-data:/data/
     ports:
-      - "7745:7745"
+      - '7745:7745'
     networks:
       - homebox-network
 
@@ -296,7 +296,7 @@ services:
     volumes:
       - open-webui-data:/app/backend/data
     ports:
-      - "3000:8080"
+      - '3000:8080'
     networks:
       - homebox-network
     depends_on:
@@ -309,7 +309,7 @@ services:
     volumes:
       - ollama-data:/root/.ollama
     ports:
-      - "11434:11434"
+      - '11434:11434'
     networks:
       - homebox-network
 

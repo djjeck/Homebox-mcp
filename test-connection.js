@@ -87,7 +87,7 @@ async function testConnection() {
         baseURL: config.homeboxUrl,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${response.data.token}`,
+          Authorization: `Bearer ${response.data.token}`,
         },
       });
 
@@ -98,7 +98,9 @@ async function testConnection() {
         console.log('   ✅ Successfully fetched locations');
         console.log(`   Found ${locationsResponse.data?.items?.length || 0} locations`);
       } catch (error) {
-        console.log('   ⚠️  Could not fetch locations (this might be normal if you have no locations yet)');
+        console.log(
+          '   ⚠️  Could not fetch locations (this might be normal if you have no locations yet)'
+        );
       }
 
       try {
@@ -115,12 +117,10 @@ async function testConnection() {
       console.log('\nYour Homebox MCP server is ready to use.');
       console.log('You can now configure it with Claude Desktop.');
       console.log('See README.md for instructions.');
-
     } else {
       console.error('   ❌ Authentication failed: No token received');
       process.exit(1);
     }
-
   } catch (error) {
     console.error('\n❌ Test failed!');
 

@@ -44,7 +44,7 @@ You'll create a simple Docker Compose configuration that pulls the pre-built ima
 1. **Copy the template below:**
 
 ```yaml
-version: "3.8"
+version: '3.8'
 
 services:
   homebox-mcp:
