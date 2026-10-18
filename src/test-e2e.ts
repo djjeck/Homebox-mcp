@@ -395,6 +395,18 @@ const TEST_CASES: TestCase[] = [
       const tag = await callTool('create_tag', { name: 'e2e-tag' });
       if (!tag.id) throw new Error('Expected created tag to have an id');
 
+      // Tags given on creation must stick (create_item used to send them under the old
+      // labelIds key, which newer Homebox versions ignore).
+      const tagged = await callTool('create_item', {
+        name: 'Tagged On Create',
+        locationId: location.id,
+        tagIds: [tag.id],
+      });
+      const fetchedTagged = await callTool('get_item', { itemId: tagged.id });
+      if (!(fetchedTagged.tags as any[]).find((t: any) => t.id === tag.id))
+        throw new Error('Tag given on create_item not found on the created item');
+      await callTool('delete_item', { itemId: tagged.id });
+
       await callTool('update_item', {
         itemId: created.id,
         name: 'Test Item (updated)',

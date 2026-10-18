@@ -387,6 +387,9 @@ class HomeboxClient {
     tenantId?: string
   ): Promise<any> {
     await this.ensureAuthenticated();
+    // Like updateItem: Homebox renamed labels to tags, and ignores the old key on newer versions,
+    // so a hardcoded labelIds silently created items without their tags.
+    const tagKey = this.tagFilterParam === 'labels' ? 'labelIds' : 'tagIds';
     try {
       const response = await this.axios.post(
         '/api/v1/items',
@@ -394,7 +397,7 @@ class HomeboxClient {
           name,
           locationId,
           description,
-          labelIds: tagIds,
+          [tagKey]: tagIds,
           parentId,
         },
         { headers: this.tenantHeaders(tenantId) }
