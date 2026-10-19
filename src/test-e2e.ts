@@ -798,6 +798,75 @@ const TEST_CASES: TestCase[] = [
   },
 
   {
+    name: 'numeric inputs: numbers, numeric strings, separators and currency all accepted',
+    async run({ callTool }) {
+      const location = await callTool('create_location', { name: 'Numeric Test Location' });
+      const item = await callTool('create_item', {
+        name: 'Numeric Test Item',
+        locationId: location.id,
+      });
+
+      // Homebox rejects a numeric cost with a 500; the server must send it as a string.
+      const asNumber = await callTool('create_maintenance_entry', {
+        itemId: item.id,
+        name: 'Cost as number',
+        completedDate: '2026-09-18T00:00:00Z',
+        cost: 405.87,
+      });
+      if (parseFloat(asNumber.cost) !== 405.87)
+        throw new Error(`Expected cost 405.87, got '${asNumber.cost}'`);
+
+      const withCurrency = await callTool('create_maintenance_entry', {
+        itemId: item.id,
+        name: 'Cost with currency',
+        completedDate: '2026-09-18T00:00:00Z',
+        cost: '$1,234.50',
+      });
+      if (parseFloat(withCurrency.cost) !== 1234.5)
+        throw new Error(`Expected cost 1234.5, got '${withCurrency.cost}'`);
+
+      const updated = await callTool('update_maintenance_entry', {
+        entryId: asNumber.id,
+        name: 'Cost as number',
+        completedDate: '2026-09-18T00:00:00Z',
+        cost: '99.10 USD',
+      });
+      if (parseFloat(updated.cost) !== 99.1)
+        throw new Error(`Expected cost 99.1, got '${updated.cost}'`);
+
+      let rejected = false;
+      try {
+        await callTool('create_maintenance_entry', {
+          itemId: item.id,
+          name: 'Cost unparseable',
+          completedDate: '2026-09-18T00:00:00Z',
+          cost: 'about eighty',
+        });
+      } catch (e: any) {
+        rejected = /cost must be a number/.test(e.message);
+      }
+      if (!rejected) throw new Error('Expected an unparseable cost to be rejected by name');
+
+      const priced = await callTool('update_item', {
+        itemId: item.id,
+        quantity: '3',
+        purchasePrice: '$1,200.50',
+        soldPrice: '0',
+      });
+      if (priced.quantity !== 3) throw new Error(`Expected quantity 3, got ${priced.quantity}`);
+      if (priced.purchasePrice !== 1200.5)
+        throw new Error(`Expected purchasePrice 1200.5, got ${priced.purchasePrice}`);
+      if (priced.soldPrice !== 0) throw new Error(`Expected soldPrice 0, got ${priced.soldPrice}`);
+
+      // Cleanup
+      await callTool('delete_maintenance_entry', { entryId: asNumber.id });
+      await callTool('delete_maintenance_entry', { entryId: withCurrency.id });
+      await callTool('delete_item', { itemId: item.id });
+      await callTool('delete_location', { locationId: location.id });
+    },
+  },
+
+  {
     name: 'collections: list_collections returns all groups; collection param scopes inventory tools',
     minVersion: '0.25.0',
     async run({ callTool }) {

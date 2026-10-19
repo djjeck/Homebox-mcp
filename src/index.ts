@@ -359,10 +359,22 @@ class HomeboxClient {
       };
       // Apply patch fields, remapping tagIds to the version-appropriate key if needed.
       const { tagIds, ...restPatch } = patch;
-      // Homebox PUT requires these as numbers; coerce in case the base state has them as strings.
-      if (restPatch.purchasePrice !== undefined)
-        restPatch.purchasePrice = Number(restPatch.purchasePrice);
-      if (restPatch.soldPrice !== undefined) restPatch.soldPrice = Number(restPatch.soldPrice);
+      // Homebox PUT requires these as numbers.
+      for (const key of ['purchasePrice', 'soldPrice'] as const) {
+        if (key in restPatch) restPatch[key] = parseNumber(restPatch[key], key, { money: true });
+      }
+      if ('quantity' in restPatch)
+        restPatch.quantity = parseNumber(restPatch.quantity, 'quantity', { integer: true });
+      if (Array.isArray(restPatch.fields)) {
+        restPatch.fields = restPatch.fields.map((f: Record<string, any>) =>
+          'numberValue' in f
+            ? { ...f, numberValue: parseNumber(f.numberValue, `field ${f.name} numberValue`) }
+            : f
+        );
+      }
+      for (const key of Object.keys(restPatch)) {
+        if (restPatch[key] === undefined) delete restPatch[key];
+      }
       const body: Record<string, any> = {
         ...base,
         ...restPatch,
@@ -716,6 +728,44 @@ function loadConfig(): HomeboxConfig {
   process.exit(1);
 }
 
+// Models send numbers as strings and strings as numbers (85 vs "85.00"), with thousands
+// separators, and money with its currency ("$1,200.50", "405.87 USD"). Every numeric input
+// accepts any of these, so a well-meant value never reaches Homebox in a shape it rejects.
+// null passes through (update_item clears a field with it); an empty string counts as absent.
+const CURRENCY = /[$€£¥]|\b(?:USD|EUR|GBP|CAD)\b/gi;
+const NUMERIC = /^[-+]?(?:\d+\.?\d*|\.\d+)$/;
+
+function parseNumber(
+  value: unknown,
+  field: string,
+  { money = false, integer = false }: { money?: boolean; integer?: boolean } = {}
+): number | null | undefined {
+  if (value === undefined || value === null) return value;
+  let parsed: number;
+  if (typeof value === 'number') {
+    parsed = value;
+  } else if (typeof value === 'string') {
+    let text = money ? value.replace(CURRENCY, '') : value;
+    text = text.replace(/\s/g, '').replace(/,(?=\d{3}(?:\D|$))/g, '');
+    if (text === '') return undefined;
+    parsed = NUMERIC.test(text) ? Number(text) : NaN;
+  } else {
+    parsed = NaN;
+  }
+  if (!Number.isFinite(parsed) || (integer && !Number.isInteger(parsed))) {
+    throw new Error(
+      `${field} must be ${integer ? 'a whole number' : 'a number'}, got ${JSON.stringify(value)}`
+    );
+  }
+  return parsed;
+}
+
+// Homebox decodes a maintenance entry's cost with a `,string` tag: it must arrive as a string.
+function costString(value: unknown): string | undefined {
+  const cost = parseNumber(value, 'cost', { money: true });
+  return cost == null ? undefined : String(cost);
+}
+
 const ATTACHMENT_TYPES = [
   'photo',
   'manual',
@@ -902,7 +952,7 @@ const TOOLS: Tool[] = [
   {
     name: 'create_maintenance_entry',
     description:
-      'Record a maintenance event on an item. At least one of completedDate or scheduledDate must be provided (the API returns 500 otherwise). For completed work, set both to the same date. Cost must be a string, not a number (e.g. "85.00").',
+      'Record a maintenance event on an item. At least one of completedDate or scheduledDate must be provided (the API returns 500 otherwise). For completed work, set both to the same date.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -930,8 +980,9 @@ const TOOLS: Tool[] = [
           description: 'Notes about the work performed, findings, or next steps',
         },
         cost: {
-          type: 'string',
-          description: 'Cost of the service as a numeric string (e.g. "85.00")',
+          type: 'number',
+          description:
+            'Cost of the service (e.g. 85.00); a numeric string or currency symbol is fine too',
         },
         ...COLLECTION_PARAM,
       },
@@ -1010,7 +1061,7 @@ const TOOLS: Tool[] = [
         },
         purchasePrice: {
           type: 'number',
-          description: 'Original purchase price (numeric, no currency symbol)',
+          description: 'Original purchase price (e.g. 1200.50); a currency symbol is ignored',
         },
         lifetimeWarranty: {
           type: 'boolean',
@@ -1364,7 +1415,7 @@ const TOOLS: Tool[] = [
   {
     name: 'update_maintenance_entry',
     description:
-      'Update an existing maintenance entry on an item. At least one of completedDate or scheduledDate must be provided. Cost must be a numeric string (e.g. "85.00").',
+      'Update an existing maintenance entry on an item. At least one of completedDate or scheduledDate must be provided.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1391,8 +1442,9 @@ const TOOLS: Tool[] = [
           description: 'Notes about the work performed, findings, or next steps',
         },
         cost: {
-          type: 'string',
-          description: 'Cost of the service as a numeric string (e.g. "85.00")',
+          type: 'number',
+          description:
+            'Cost of the service (e.g. 85.00); a numeric string or currency symbol is fine too',
         },
         ...COLLECTION_PARAM,
       },
@@ -1564,7 +1616,7 @@ function setupHandlers(
             args.completedDate as string | undefined,
             args.scheduledDate as string | undefined,
             args.description as string | undefined,
-            args.cost as string | undefined,
+            costString(args.cost),
             tenantId
           );
           return {
@@ -1676,7 +1728,7 @@ function setupHandlers(
             args.completedDate as string | undefined,
             args.scheduledDate as string | undefined,
             args.description as string | undefined,
-            args.cost as string | undefined,
+            costString(args.cost),
             tenantId
           );
           return {
