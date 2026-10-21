@@ -286,6 +286,19 @@ class HomeboxClient {
     }
   }
 
+  async listMaintenance(status: string, tenantId?: string): Promise<any> {
+    await this.ensureAuthenticated();
+    try {
+      const response = await this.axios.get('/api/v1/maintenance', {
+        params: { status },
+        headers: this.tenantHeaders(tenantId),
+      });
+      return response.data ?? [];
+    } catch (error: any) {
+      throw new Error(`Failed to list maintenance entries: ${error.message}`);
+    }
+  }
+
   async getItemMaintenance(itemId: string, tenantId?: string): Promise<any> {
     await this.ensureAuthenticated();
     try {
@@ -931,6 +944,23 @@ const TOOLS: Tool[] = [
         ...COLLECTION_PARAM,
       },
       required: ['itemId'],
+    },
+  },
+  {
+    name: 'list_maintenance',
+    description:
+      "List the maintenance entries of every item in a collection, each with its item's ID and name (itemID, itemName). Homebox can't filter by date: filter on completedDate / scheduledDate yourself. Use this to see what was done (or is scheduled) across the whole inventory; use get_item_maintenance for one item.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['completed', 'scheduled', 'both'],
+          description:
+            "Which entries: 'completed' (has a completedDate), 'scheduled' (not completed yet), or 'both' (default)",
+        },
+        ...COLLECTION_PARAM,
+      },
     },
   },
   {
@@ -1597,6 +1627,17 @@ function setupHandlers(
 
         case 'get_item_maintenance': {
           const result = await homeboxClient.getItemMaintenance(args.itemId as string, tenantId);
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          };
+        }
+
+        case 'list_maintenance': {
+          const status = (args.status as string | undefined) ?? 'both';
+          if (!['completed', 'scheduled', 'both'].includes(status)) {
+            throw new Error(`status must be 'completed', 'scheduled' or 'both', got '${status}'`);
+          }
+          const result = await homeboxClient.listMaintenance(status, tenantId);
           return {
             content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
           };

@@ -265,16 +265,17 @@ The MCP server provides these tools:
 16. **update_tag** - Rename a tag, change its description, color, icon, or parent
 17. **delete_tag** - Delete a tag
 18. **get_item_maintenance** - List all maintenance entries for an item (completed and scheduled)
-19. **create_maintenance_entry** - Record a maintenance event on an item
-20. **update_maintenance_entry** - Update an existing maintenance entry (name, dates, description, cost)
-21. **delete_maintenance_entry** - Delete a maintenance entry
+19. **list_maintenance** - List the maintenance entries of every item in a collection (completed, scheduled or both), each with its item
+20. **create_maintenance_entry** - Record a maintenance event on an item
+21. **update_maintenance_entry** - Update an existing maintenance entry (name, dates, description, cost)
+22. **delete_maintenance_entry** - Delete a maintenance entry
 
 **Attachments**
 
-19. **get_item_attachment** - Get download access to an attachment. Returns an HTTP proxy URL (for cross-MCP transfer: pass to another MCP's upload tool) and a `resource_link` (for reading content via `resources/read` without HTTP fetch restrictions). HTTP mode only; requires `ATTACHMENT_BASE_URL`.
-20. **upload_item_attachment** - Fetch a file from a URL and attach it to an item
-21. **update_item_attachment** - Update attachment metadata (title, type, primary flag)
-22. **delete_item_attachment** - Permanently delete an attachment
+23. **get_item_attachment** - Get download access to an attachment. Returns an HTTP proxy URL (for cross-MCP transfer: pass to another MCP's upload tool) and a `resource_link` (for reading content via `resources/read` without HTTP fetch restrictions). HTTP mode only; requires `ATTACHMENT_BASE_URL`.
+24. **upload_item_attachment** - Fetch a file from a URL and attach it to an item
+25. **update_item_attachment** - Update attachment metadata (title, type, primary flag)
+26. **delete_item_attachment** - Permanently delete an attachment
 
 All inventory tools (everything except `list_collections`) accept an optional **`collection`** parameter — a collection name or ID. When omitted, the account's default collection is used. See [Working with Collections](#working-with-collections) below.
 

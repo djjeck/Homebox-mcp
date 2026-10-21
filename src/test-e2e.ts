@@ -496,6 +496,22 @@ const TEST_CASES: TestCase[] = [
       if (parseFloat(found.cost) !== 150)
         throw new Error(`get_item_maintenance: expected cost 150, got '${found.cost}'`);
 
+      // list_maintenance must return it too, with its item, under 'completed' and 'both'
+      for (const status of ['completed', 'both']) {
+        const all: any[] = await callTool('list_maintenance', { status });
+        if (!Array.isArray(all))
+          throw new Error(`list_maintenance (${status}): expected array, got ${typeof all}`);
+        const listed = all.find((e: any) => e.id === entry.id);
+        if (!listed) throw new Error(`list_maintenance (${status}): created entry not found`);
+        if (listed.itemID !== item.id || listed.itemName !== 'Maintenance Test Item')
+          throw new Error(
+            `list_maintenance (${status}): expected item ${item.id}, got ${listed.itemID} '${listed.itemName}'`
+          );
+      }
+      const scheduledOnly: any[] = await callTool('list_maintenance', { status: 'scheduled' });
+      if (scheduledOnly.find((e: any) => e.id === entry.id))
+        throw new Error("list_maintenance ('scheduled'): completed entry listed");
+
       await callTool('delete_maintenance_entry', { entryId: entry.id });
 
       // Verify deletion via get_item_maintenance
