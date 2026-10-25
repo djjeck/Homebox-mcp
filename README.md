@@ -273,8 +273,8 @@ The MCP server provides these tools:
 **Attachments**
 
 23. **get_item_attachment** - Get download access to an attachment. Returns an HTTP proxy URL (for cross-MCP transfer: pass to another MCP's upload tool) and a `resource_link` (for reading content via `resources/read` without HTTP fetch restrictions). HTTP mode only; requires `ATTACHMENT_BASE_URL`.
-24. **upload_item_attachment** - Fetch a file from a URL and attach it to an item
-25. **update_item_attachment** - Update attachment metadata (title, type, primary flag)
+24. **upload_item_attachment** - Fetch a file from a URL and attach it to an item; with no type, an image is a `photo` and anything else an `attachment`
+25. **update_item_attachment** - Update attachment metadata (title, type, primary flag); fields left out keep their current value
 26. **delete_item_attachment** - Permanently delete an attachment
 
 All inventory tools (everything except `list_collections`) accept an optional **`collection`** parameter — a collection name or ID. When omitted, the account's default collection is used. See [Working with Collections](#working-with-collections) below.

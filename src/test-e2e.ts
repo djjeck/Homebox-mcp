@@ -708,6 +708,18 @@ const TEST_CASES: TestCase[] = [
       if (renamedAtt.type !== 'receipt')
         throw new Error(`Expected type 'receipt', got '${renamedAtt.type}'`);
 
+      // update_item_attachment with only a title keeps the type (Homebox's PUT would blank it)
+      const retitled = await callTool('update_item_attachment', {
+        itemId: item.id,
+        attachmentId: att.id,
+        title: 'e2e-test-retitled.txt',
+      });
+      const retitledAtt = (retitled?.attachments ?? []).find((a: any) => a.id === att.id);
+      if (retitledAtt?.title !== 'e2e-test-retitled.txt')
+        throw new Error(`Expected retitled title, got '${retitledAtt?.title}'`);
+      if (retitledAtt.type !== 'receipt')
+        throw new Error(`Expected type 'receipt' kept, got '${retitledAtt.type}'`);
+
       // delete_item_attachment
       await callTool('delete_item_attachment', { itemId: item.id, attachmentId: att.id });
 

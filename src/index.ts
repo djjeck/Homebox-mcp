@@ -523,15 +523,27 @@ class HomeboxClient {
     itemId: string,
     attachmentId: string,
     title?: string,
-    type?: string,
+    type?: AttachmentType,
     primary?: boolean,
     tenantId?: string
   ): Promise<any> {
     await this.ensureAuthenticated();
     try {
+      // Homebox's PUT writes type, title and primary unconditionally: a missing type is an
+      // empty enum value (500), a missing title blanks it, a missing primary unsets it. Fill
+      // whatever the caller left out from the attachment as it is.
+      const itemResponse = await this.axios.get(`/api/v1/items/${itemId}`, {
+        headers: this.tenantHeaders(tenantId),
+      });
+      const current = (itemResponse.data.attachments ?? []).find((a: any) => a.id === attachmentId);
+      if (!current) throw new Error(`Attachment ${attachmentId} not found on item ${itemId}`);
       const response = await this.axios.put(
         `/api/v1/items/${itemId}/attachments/${attachmentId}`,
-        { title, type, primary },
+        {
+          title: title ?? current.title,
+          type: type ?? current.type,
+          primary: primary ?? current.primary,
+        },
         { headers: this.tenantHeaders(tenantId) }
       );
       return response.data;
@@ -574,7 +586,8 @@ class HomeboxClient {
       const blob = new Blob([fileArrayBuffer], { type: contentType });
       form.append('file', blob, filename);
       form.append('name', name ?? filename);
-      if (type) form.append('type', type);
+      // Homebox never infers a type from the file; an image with no type is a photo.
+      form.append('type', type ?? (contentType.startsWith('image/') ? 'photo' : 'attachment'));
 
       const response = await this.axios.post(`/api/v1/items/${itemId}/attachments`, form, {
         headers: { 'Content-Type': 'multipart/form-data', ...this.tenantHeaders(tenantId) },
@@ -788,6 +801,18 @@ const ATTACHMENT_TYPES = [
   'thumbnail',
 ] as const;
 type AttachmentType = (typeof ATTACHMENT_TYPES)[number];
+
+// Homebox answers a type outside its enum with a silent 201 on upload (the record isn't
+// persisted) and a 500 on update, so both check it here.
+function parseAttachmentType(raw: unknown): AttachmentType | undefined {
+  if (raw === undefined) return undefined;
+  if (!(ATTACHMENT_TYPES as readonly unknown[]).includes(raw)) {
+    throw new Error(
+      `Invalid attachment type "${raw}". Must be one of: ${ATTACHMENT_TYPES.join(', ')}`
+    );
+  }
+  return raw as AttachmentType;
+}
 
 const COLLECTION_PARAM = {
   collection: {
@@ -1320,7 +1345,7 @@ const TOOLS: Tool[] = [
   {
     name: 'update_item_attachment',
     description:
-      "Update the metadata of an existing attachment (title, type, or primary flag). Returns the updated item JSON. The attachment ID is found in the item's attachments array.",
+      "Update the metadata of an existing attachment (title, type, or primary flag); fields left out keep their current value. Returns the updated item JSON. The attachment ID is found in the item's attachments array. Only a photo can be primary: Homebox unsets primary on any other type.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -1372,7 +1397,8 @@ const TOOLS: Tool[] = [
         type: {
           type: 'string',
           enum: ['photo', 'manual', 'warranty', 'attachment', 'receipt', 'thumbnail'],
-          description: "Attachment type. Defaults to 'attachment' if omitted.",
+          description:
+            "Attachment type. If omitted, 'photo' for an image and 'attachment' for anything else.",
         },
         ...COLLECTION_PARAM,
       },
@@ -1817,7 +1843,7 @@ function setupHandlers(
             args.itemId as string,
             args.attachmentId as string,
             args.title as string | undefined,
-            args.type as string | undefined,
+            parseAttachmentType(args.type),
             args.primary as boolean | undefined,
             tenantId
           );
@@ -1827,17 +1853,11 @@ function setupHandlers(
         }
 
         case 'upload_item_attachment': {
-          const rawType = args.type as string | undefined;
-          if (rawType !== undefined && !(ATTACHMENT_TYPES as readonly string[]).includes(rawType)) {
-            throw new Error(
-              `Invalid attachment type "${rawType}". Must be one of: ${ATTACHMENT_TYPES.join(', ')}`
-            );
-          }
           const result = await homeboxClient.uploadItemAttachment(
             args.itemId as string,
             args.url as string,
             args.name as string | undefined,
-            rawType as AttachmentType | undefined,
+            parseAttachmentType(args.type),
             tenantId
           );
           return {
