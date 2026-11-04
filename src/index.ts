@@ -847,7 +847,7 @@ const COLLECTION_PARAM = {
   collection: {
     type: 'string',
     description:
-      "Optional: name or ID of the collection (group) to operate in. If omitted, uses the account's default collection. Use list_collections to see available collections.",
+      'Name or ID of the collection (group) to operate in. Required: there is no default collection. Use list_collections to see available collections.',
   },
 } as const;
 
@@ -856,7 +856,7 @@ const TOOLS: Tool[] = [
   {
     name: 'list_collections',
     description:
-      'List all Homebox collections (groups) this account belongs to. Each collection is a completely independent inventory — items, locations, and tags are not shared between collections. Use the collection name or ID with other tools to target a specific collection. The default collection is used when no collection is specified.',
+      'List all Homebox collections (groups) this account belongs to. Each collection is a completely independent inventory — items, locations, and tags are not shared between collections. Every other tool takes a collection name or ID, and requires one.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -883,7 +883,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['query'],
+      required: ['query', 'collection'],
     },
   },
   {
@@ -899,7 +899,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId'],
+      required: ['itemId', 'collection'],
     },
   },
   {
@@ -909,6 +909,7 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: { ...COLLECTION_PARAM },
+      required: ['collection'],
     },
   },
   {
@@ -924,7 +925,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['locationId'],
+      required: ['locationId', 'collection'],
     },
   },
   {
@@ -934,6 +935,7 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: { ...COLLECTION_PARAM },
+      required: ['collection'],
     },
   },
   {
@@ -949,7 +951,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['tagId'],
+      required: ['tagId', 'collection'],
     },
   },
   {
@@ -965,7 +967,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['locationId'],
+      required: ['locationId', 'collection'],
     },
   },
   {
@@ -981,7 +983,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['tagId'],
+      required: ['tagId', 'collection'],
     },
   },
   {
@@ -997,7 +999,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId'],
+      required: ['itemId', 'collection'],
     },
   },
   {
@@ -1015,6 +1017,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
+      required: ['collection'],
     },
   },
   {
@@ -1030,7 +1033,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['entryId'],
+      required: ['entryId', 'collection'],
     },
   },
   {
@@ -1070,7 +1073,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId', 'name'],
+      required: ['itemId', 'name', 'collection'],
     },
   },
   {
@@ -1199,7 +1202,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId'],
+      required: ['itemId', 'collection'],
     },
   },
   {
@@ -1232,7 +1235,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['name', 'locationId'],
+      required: ['name', 'locationId', 'collection'],
     },
   },
   {
@@ -1252,7 +1255,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['name'],
+      required: ['name', 'collection'],
     },
   },
   {
@@ -1272,7 +1275,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['name'],
+      required: ['name', 'collection'],
     },
   },
   {
@@ -1287,7 +1290,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId'],
+      required: ['itemId', 'collection'],
     },
   },
   {
@@ -1303,7 +1306,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['locationId'],
+      required: ['locationId', 'collection'],
     },
   },
   {
@@ -1318,7 +1321,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['tagId'],
+      required: ['tagId', 'collection'],
     },
   },
   {
@@ -1348,7 +1351,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId', 'attachmentId', 'title'],
+      required: ['itemId', 'attachmentId', 'title', 'collection'],
     },
   },
   {
@@ -1368,7 +1371,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId', 'attachmentId'],
+      required: ['itemId', 'attachmentId', 'collection'],
     },
   },
   {
@@ -1401,7 +1404,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId', 'attachmentId'],
+      required: ['itemId', 'attachmentId', 'collection'],
     },
   },
   {
@@ -1442,7 +1445,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId'],
+      required: ['itemId', 'collection'],
     },
   },
   {
@@ -1470,7 +1473,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['locationId', 'name'],
+      required: ['locationId', 'name', 'collection'],
     },
   },
   {
@@ -1505,7 +1508,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['tagId', 'name'],
+      required: ['tagId', 'name', 'collection'],
     },
   },
   {
@@ -1544,10 +1547,15 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['entryId', 'name'],
+      required: ['entryId', 'name', 'collection'],
     },
   },
 ];
+
+// The tools whose calls the dispatcher rejects without a collection: all but list_collections.
+const COLLECTION_TOOLS = new Set(
+  TOOLS.filter((t) => t.inputSchema.required?.includes('collection')).map((t) => t.name)
+);
 
 function setupHandlers(
   server: Server,
@@ -1614,10 +1622,19 @@ function setupHandlers(
         throw new Error('Missing arguments');
       }
 
-      // Resolve optional collection name/id to a tenant UUID for all tools that support it
-      const tenantId = args.collection
-        ? await homeboxClient.resolveCollection(args.collection as string)
-        : undefined;
+      // Every tool but list_collections requires a collection: falling back to the account's
+      // default silently reads or writes the wrong inventory when a caller forgets one.
+      let tenantId: string | undefined;
+      if (COLLECTION_TOOLS.has(name)) {
+        if (!args.collection) {
+          const { collections } = await homeboxClient.listCollections();
+          const names = collections.map((c) => `"${c.name}"`).join(', ');
+          throw new Error(
+            `${name} requires a collection: pass its name or ID. Available collections: ${names}`
+          );
+        }
+        tenantId = await homeboxClient.resolveCollection(args.collection as string);
+      }
 
       switch (name) {
         case 'list_collections': {

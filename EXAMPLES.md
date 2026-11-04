@@ -345,7 +345,7 @@ or
 > "Search for 'sofa' in the Appliances collection"
 
 **What happens:**
-Claude passes the collection name to each inventory tool as needed. The request is scoped to that collection only — data from other collections is never mixed in.
+Claude passes the collection name to each inventory tool; every inventory tool requires one, and there is no default collection to fall back to. The request is scoped to that collection only — data from other collections is never mixed in.
 
 ---
 

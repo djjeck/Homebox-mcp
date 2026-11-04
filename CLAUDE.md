@@ -29,7 +29,7 @@ The entire server lives in `src/index.ts` (~2000 lines). There is no module spli
 - **stdio** — for Claude Desktop / local use. One process per session.
 - **HTTP (Streamable HTTP, MCP spec 2025-03-26)** — for claude.ai remote MCP. Sessions are keyed by session ID; one `StreamableHTTPServerTransport` per session stored in a `Map`. Set `PORT` env var to activate.
 
-**Collection (multi-tenant) support:** Homebox calls them "groups" in the API. Every inventory tool accepts an optional `collection` parameter (name or ID). `HomeboxClient.resolveCollection()` resolves the name to a group ID, which is then passed as the `X-Tenant` header on each request. There is no global "active collection" state — scoping is per-request.
+**Collection (multi-tenant) support:** Homebox calls them "groups" in the API. Every inventory tool requires a `collection` parameter (name or ID): the dispatcher rejects a call without one (`COLLECTION_TOOLS`), since falling back to the account's default collection silently read or wrote the wrong inventory. `HomeboxClient.resolveCollection()` resolves the name to a group ID, which is then passed as the `X-Tenant` header on each request. There is no global "active collection" state — scoping is per-request.
 
 **Attachments:** `get_item_attachment` returns both a proxy URL (HTTP mode only, requires `ATTACHMENT_BASE_URL`) and a `resource_link` for `resources/read`. The proxy is implemented as a `/attachments/:token` route on the HTTP server. `upload_item_attachment` takes the file from a `url` or as base64 `content` (for programmatic callers); so that content fits, the HTTP server reads POST bodies itself (`readJsonBody`, 16 MB) and passes them to the transport, whose own parsing stops at 4 MB.
 

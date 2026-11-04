@@ -277,7 +277,7 @@ The MCP server provides these tools:
 25. **update_item_attachment** - Update attachment metadata (title, type, primary flag); fields left out keep their current value
 26. **delete_item_attachment** - Permanently delete an attachment
 
-All inventory tools (everything except `list_collections`) accept an optional **`collection`** parameter — a collection name or ID. When omitted, the account's default collection is used. See [Working with Collections](#working-with-collections) below.
+All inventory tools (everything except `list_collections`) require a **`collection`** parameter — a collection name or ID. There is no default: a call without one fails, listing the available collections. See [Working with Collections](#working-with-collections) below.
 
 ## Working with Collections
 
@@ -293,7 +293,7 @@ Claude will call `list_collections`, which returns all collections along with wh
 
 ### Targeting a specific collection
 
-Every inventory tool accepts an optional `collection` parameter. You can pass either the collection's **name** (case-insensitive) or its **ID**:
+Every inventory tool requires a `collection` parameter. You can pass either the collection's **name** (case-insensitive) or its **ID**:
 
 ```
 "Show me all locations in my Artwork collection"
@@ -301,7 +301,7 @@ Every inventory tool accepts an optional `collection` parameter. You can pass ei
 "Add a new location called 'Attic' to my Structure collection"
 ```
 
-When no `collection` is specified, every tool operates on your account's default collection. Claude will generally ask which collection you mean if the intent is ambiguous, or will call `list_collections` first to discover what's available.
+A call without a `collection` fails rather than falling back to the account's default collection: the fallback let a forgotten parameter silently read or write the wrong inventory (a search came back empty, a new item landed in another collection). The error lists the available collections, so Claude can pick one and retry; it will generally ask which collection you mean if the intent is ambiguous, or call `list_collections` first to discover what's available.
 
 ### How it works
 

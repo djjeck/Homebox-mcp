@@ -188,8 +188,29 @@ class McpClient {
     await this.client.connect(this.transport);
   }
 
+  // Every tool but list_collections requires a collection. Tests that aren't about collections
+  // run in the account's default one; a test that sets `collection` itself (even to undefined,
+  // which sends none) is left alone.
+  private defaultCollection: string | null = null;
+
+  private async withCollection(
+    name: string,
+    args: Record<string, any>
+  ): Promise<Record<string, any>> {
+    if (name === 'list_collections' || 'collection' in args) return args;
+    if (!this.defaultCollection) {
+      const result = await this.client.callTool({ name: 'list_collections', arguments: {} });
+      const { collections } = JSON.parse((result.content as any)[0].text);
+      this.defaultCollection = collections.find((c: any) => c.isDefault).id as string;
+    }
+    return { ...args, collection: this.defaultCollection };
+  }
+
   async callTool(name: string, args: Record<string, any>): Promise<any> {
-    const result = await this.client.callTool({ name, arguments: args });
+    const result = await this.client.callTool({
+      name,
+      arguments: await this.withCollection(name, args),
+    });
     if (result?.isError) {
       throw new Error(`Tool error: ${(result.content as any)?.[0]?.text ?? 'unknown'}`);
     }
@@ -202,7 +223,10 @@ class McpClient {
   }
 
   async callToolRaw(name: string, args: Record<string, any>): Promise<any> {
-    const result = await this.client.callTool({ name, arguments: args });
+    const result = await this.client.callTool({
+      name,
+      arguments: await this.withCollection(name, args),
+    });
     if (result?.isError) {
       throw new Error(`Tool error: ${(result.content as any)?.[0]?.text ?? 'unknown'}`);
     }
@@ -922,7 +946,7 @@ const TEST_CASES: TestCase[] = [
   },
 
   {
-    name: 'collections: list_collections returns all groups; collection param scopes inventory tools',
+    name: 'collections: list_collections returns all groups; collection param is required and scopes inventory tools',
     minVersion: '0.25.0',
     async run({ callTool }) {
       // list_collections must return at least two groups (default + the extra one created in setup)
@@ -937,9 +961,20 @@ const TEST_CASES: TestCase[] = [
       const otherCol = collections.find((c: any) => !c.isDefault);
       if (!otherCol) throw new Error('No non-default collection found');
 
-      // Create a location in the default collection (no collection param)
+      // A call without a collection must fail, naming the available ones, rather than fall
+      // back to the default (collection: undefined sends none: see McpClient.withCollection)
+      try {
+        await callTool('list_locations', { collection: undefined });
+        throw new Error('Expected error for a missing collection, got none');
+      } catch (err: any) {
+        if (!err.message.includes('requires a collection') || !err.message.includes(otherCol.name))
+          throw new Error(`Expected 'requires a collection' error, got: ${err.message}`);
+      }
+
+      // Create a location in the default collection, named explicitly
       const locDefault = await callTool('create_location', {
         name: 'Collection Test Location (default)',
+        collection: defaultCol.name,
       });
 
       // Create a location in the other collection by name
@@ -948,8 +983,8 @@ const TEST_CASES: TestCase[] = [
         collection: otherCol.name,
       });
 
-      // list_locations without collection param must see the default location, not the other
-      const defaultLocs: any[] = await callTool('list_locations', {});
+      // list_locations in the default collection must see the default location, not the other
+      const defaultLocs: any[] = await callTool('list_locations', { collection: defaultCol.id });
       if (!defaultLocs.find((l: any) => l.id === locDefault.id))
         throw new Error('Default collection location not found in default list_locations');
       if (defaultLocs.find((l: any) => l.id === locOther.id))
@@ -975,7 +1010,10 @@ const TEST_CASES: TestCase[] = [
         locationId: locOther.id,
         collection: otherCol.id,
       });
-      const searchDefault = await callTool('search_items', { query: 'Collection Test Item' });
+      const searchDefault = await callTool('search_items', {
+        query: 'Collection Test Item',
+        collection: defaultCol.id,
+      });
       const defaultItems: any[] = searchDefault?.items ?? searchDefault ?? [];
       if (defaultItems.find((i: any) => i.id === itemOther.id))
         throw new Error('Item from other collection leaked into default collection search');
@@ -1000,7 +1038,7 @@ const TEST_CASES: TestCase[] = [
       // Cleanup: delete from each collection explicitly
       await callTool('delete_item', { itemId: itemOther.id, collection: otherCol.id });
       await callTool('delete_location', { locationId: locOther.id, collection: otherCol.id });
-      await callTool('delete_location', { locationId: locDefault.id });
+      await callTool('delete_location', { locationId: locDefault.id, collection: defaultCol.id });
     },
   },
 
