@@ -554,31 +554,39 @@ class HomeboxClient {
 
   async uploadItemAttachment(
     itemId: string,
-    url: string,
+    source: AttachmentSource,
     name?: string,
     type?: AttachmentType,
     tenantId?: string
   ): Promise<any> {
     await this.ensureAuthenticated();
 
-    // Fetch the file from the given URL
     let fileArrayBuffer: ArrayBuffer;
     let contentType: string;
     let filename: string;
-    try {
-      const fetchResponse = await fetch(url);
-      if (!fetchResponse.ok) {
-        throw new Error(`HTTP ${fetchResponse.status} ${fetchResponse.statusText}`);
+    if ('content' in source) {
+      // Bytes supplied by the caller: there is no URL to name the file after.
+      const bytes = Buffer.from(source.content, 'base64');
+      fileArrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      contentType = source.mimeType ?? 'application/octet-stream';
+      filename = name ?? 'attachment';
+    } else {
+      // Fetch the file from the given URL
+      try {
+        const fetchResponse = await fetch(source.url);
+        if (!fetchResponse.ok) {
+          throw new Error(`HTTP ${fetchResponse.status} ${fetchResponse.statusText}`);
+        }
+        contentType = fetchResponse.headers.get('content-type') ?? 'application/octet-stream';
+        // Strip parameters (e.g. "application/pdf; charset=utf-8" → "application/pdf")
+        contentType = contentType.split(';')[0].trim();
+        fileArrayBuffer = await fetchResponse.arrayBuffer();
+        // Derive filename from URL path if not provided
+        const urlPath = new URL(source.url).pathname;
+        filename = name ?? urlPath.split('/').filter(Boolean).pop() ?? 'attachment';
+      } catch (error: any) {
+        throw new Error(`Failed to fetch attachment from URL: ${error.message}`);
       }
-      contentType = fetchResponse.headers.get('content-type') ?? 'application/octet-stream';
-      // Strip parameters (e.g. "application/pdf; charset=utf-8" → "application/pdf")
-      contentType = contentType.split(';')[0].trim();
-      fileArrayBuffer = await fetchResponse.arrayBuffer();
-      // Derive filename from URL path if not provided
-      const urlPath = new URL(url).pathname;
-      filename = name ?? urlPath.split('/').filter(Boolean).pop() ?? 'attachment';
-    } catch (error: any) {
-      throw new Error(`Failed to fetch attachment from URL: ${error.message}`);
     }
 
     try {
@@ -812,6 +820,27 @@ function parseAttachmentType(raw: unknown): AttachmentType | undefined {
     );
   }
   return raw as AttachmentType;
+}
+
+// Where an uploaded attachment's bytes come from: a URL this server fetches, or the bytes
+// themselves, base64, from a programmatic caller.
+type AttachmentSource = { url: string } | { content: string; mimeType?: string };
+
+function parseAttachmentSource(args: Record<string, unknown>): AttachmentSource {
+  const { url, content, mimeType } = args;
+  if ((url === undefined) === (content === undefined)) {
+    throw new Error('Pass exactly one of url or content');
+  }
+  if (content !== undefined) {
+    if (typeof content !== 'string' || content === '') {
+      throw new Error('content must be a non-empty base64 string');
+    }
+    if (typeof args.name !== 'string' || args.name === '') {
+      throw new Error('name is required with content, since there is no URL to name the file');
+    }
+    return { content, mimeType: mimeType as string | undefined };
+  }
+  return { url: url as string };
 }
 
 const COLLECTION_PARAM = {
@@ -1378,7 +1407,7 @@ const TOOLS: Tool[] = [
   {
     name: 'upload_item_attachment',
     description:
-      'Fetch a file from a URL and upload it as an attachment to an existing Homebox item. The file is fetched server-side, so the URL must be reachable from the MCP server. Returns the updated item JSON.',
+      'Upload a file as an attachment to an existing Homebox item, from a URL (fetched server-side, so it must be reachable from the MCP server) or from base64 content. Pass exactly one of url or content. Returns the updated item JSON.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1390,9 +1419,20 @@ const TOOLS: Tool[] = [
           type: 'string',
           description: 'URL to fetch the file from. Must be accessible from the MCP server.',
         },
+        content: {
+          type: 'string',
+          description:
+            "The file's bytes, base64-encoded, instead of a url. Meant for programmatic callers that already hold the file. An AI model should pass a url instead: base64 it writes out costs tokens and is easily corrupted.",
+        },
+        mimeType: {
+          type: 'string',
+          description:
+            "MIME type of content (e.g. 'application/pdf'). Only used with content; defaults to application/octet-stream.",
+        },
         name: {
           type: 'string',
-          description: 'Display name for the attachment. Defaults to the filename from the URL.',
+          description:
+            'Display name for the attachment. Defaults to the filename from the URL; required with content.',
         },
         type: {
           type: 'string',
@@ -1402,7 +1442,7 @@ const TOOLS: Tool[] = [
         },
         ...COLLECTION_PARAM,
       },
-      required: ['itemId', 'url'],
+      required: ['itemId'],
     },
   },
   {
@@ -1855,7 +1895,7 @@ function setupHandlers(
         case 'upload_item_attachment': {
           const result = await homeboxClient.uploadItemAttachment(
             args.itemId as string,
-            args.url as string,
+            parseAttachmentSource(args),
             args.name as string | undefined,
             parseAttachmentType(args.type),
             tenantId
@@ -1880,6 +1920,26 @@ function setupHandlers(
       };
     }
   });
+}
+
+// Room for a ~10 MB attachment as base64 in upload_item_attachment's content.
+const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
+
+class RequestTooLargeError extends Error {}
+
+async function readJsonBody(req: IncomingMessage, limit: number): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new RequestTooLargeError(`Request body exceeds ${limit} bytes`);
+    chunks.push(chunk);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+  } catch {
+    throw new Error('Parse error: request body is not valid JSON');
+  }
 }
 
 // Main server setup
@@ -1974,6 +2034,25 @@ async function main() {
             const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
             if (req.method === 'POST') {
+              // Read the body here: the SDK's own parsing caps it at 4 MB, too small for
+              // upload_item_attachment's base64 content.
+              let body: unknown;
+              try {
+                body = await readJsonBody(req, MAX_REQUEST_BYTES);
+              } catch (err: any) {
+                res.writeHead(err instanceof RequestTooLargeError ? 413 : 400, {
+                  'Content-Type': 'application/json',
+                });
+                res.end(
+                  JSON.stringify({
+                    jsonrpc: '2.0',
+                    error: { code: -32700, message: err.message },
+                    id: null,
+                  })
+                );
+                return;
+              }
+
               let transport: StreamableHTTPServerTransport;
 
               // Re-use existing session or create a new one for initialize requests
@@ -2006,7 +2085,7 @@ async function main() {
                 return;
               }
 
-              await transport.handleRequest(req, res);
+              await transport.handleRequest(req, res, body);
             } else if (req.method === 'GET' || req.method === 'DELETE') {
               if (!sessionId || !transports.has(sessionId)) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });

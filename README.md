@@ -273,7 +273,7 @@ The MCP server provides these tools:
 **Attachments**
 
 23. **get_item_attachment** - Get download access to an attachment. Returns an HTTP proxy URL (for cross-MCP transfer: pass to another MCP's upload tool) and a `resource_link` (for reading content via `resources/read` without HTTP fetch restrictions). HTTP mode only; requires `ATTACHMENT_BASE_URL`.
-24. **upload_item_attachment** - Fetch a file from a URL and attach it to an item; with no type, an image is a `photo` and anything else an `attachment`
+24. **upload_item_attachment** - Attach a file to an item, fetched from a URL or passed as base64 `content` (for programmatic callers; bodies up to 16 MB in HTTP mode); with no type, an image is a `photo` and anything else an `attachment`
 25. **update_item_attachment** - Update attachment metadata (title, type, primary flag); fields left out keep their current value
 26. **delete_item_attachment** - Permanently delete an attachment
 

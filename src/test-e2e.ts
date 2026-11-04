@@ -728,6 +728,33 @@ const TEST_CASES: TestCase[] = [
       if (remainingAtts.find((a: any) => a.id === att.id))
         throw new Error('Attachment still present after delete');
 
+      // upload_item_attachment from base64 content instead of a URL
+      const CONTENT_FILENAME = 'e2e-content.txt';
+      const fromContent = await callTool('upload_item_attachment', {
+        itemId: item.id,
+        content: Buffer.from(ATTACHMENT_CONTENT).toString('base64'),
+        mimeType: 'text/plain',
+        name: CONTENT_FILENAME,
+        type: 'receipt',
+      });
+      const contentAtt = (fromContent?.attachments ?? []).find(
+        (a: any) => a.title === CONTENT_FILENAME
+      );
+      if (!contentAtt) throw new Error(`Attachment '${CONTENT_FILENAME}' not found after upload`);
+      if (contentAtt.type !== 'receipt')
+        throw new Error(`Expected type 'receipt', got '${contentAtt.type}'`);
+      const contentRead = await readResource(
+        `http://localhost:8811/items/${item.id}/attachments/${contentAtt.id}/${CONTENT_FILENAME}`
+      );
+      const contentItem = (contentRead as any[])?.[0];
+      const contentText =
+        contentItem?.text ??
+        (contentItem?.blob ? Buffer.from(contentItem.blob, 'base64').toString('utf-8') : undefined);
+      if (contentText !== ATTACHMENT_CONTENT)
+        throw new Error(
+          `content upload mismatch: expected ${JSON.stringify(ATTACHMENT_CONTENT)}, got ${JSON.stringify(contentText)}`
+        );
+
       // Cleanup
       await callTool('delete_item', { itemId: item.id });
       await callTool('delete_location', { locationId: location.id });
